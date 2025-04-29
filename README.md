@@ -88,7 +88,7 @@ For randomly generated problems, run:
 python test.py
 ```
 
-For benchmark instances, do not forget to set the proper path (```benchmark_path``` in ```test_paras```) for the benchmark dataset to be used for evaluation. After, run:
+For benchmark instances, do not forget to set the proper path (```benchmark_path``` in ```test_paras```) for the benchmark dataset to be used for evaluation. To properly save the results on each individual instance on an excel, change the ```output_path``` variable name as needed, at the end of the ```test_benchmark.py``` file. After, run:
 
 ```
 python test_benchmark.py
