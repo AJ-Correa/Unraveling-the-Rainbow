@@ -133,8 +133,7 @@ def main(env_paras, model_paras, train_paras, extension_paras, test_paras, confi
         raise Exception("Sampling decoding not implemented for benchmark problems")
 
 if __name__ == '__main__':
-    # instance_sizes = [(6, 6), (10, 5), (20, 5), (15, 10), (20, 10)]
-    instance_sizes = [(6, 6), (10, 5), (20, 10)]
+    instance_sizes = [(6, 6), (10, 5), (20, 5), (15, 10), (20, 10)]
     results = {}
 
     for size in instance_sizes:
