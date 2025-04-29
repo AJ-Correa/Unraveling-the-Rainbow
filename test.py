@@ -155,6 +155,9 @@ if __name__ == '__main__':
                        [True, True, True, True, True, True]]
 
         for config in range(9):
+            print("#####################################################################################")
+            print(f"Running {config_names[config]} model - Instance size: {size[0]}x{size[1]}")
+
             # Load config and init objects
             with open("./config.json", 'r') as load_f:
                 load_dict = json.load(load_f)
