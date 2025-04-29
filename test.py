@@ -141,37 +141,44 @@ def main(env_paras, model_paras, train_paras, extension_paras, test_paras, confi
                   round(makespan.item(), 2), ' | best overall makespan: ', round(best_makespans.mean().item(), 2), '\n')
 
 if __name__ == '__main__':
-    config_names = ["DQN", "DDQN", "PER", "Dueling", "Noisy", "Distributional", "NStep", "Rainbow", "PPO"]
-    config_uses = [[False, False, False, False, False, False],
-                   [True, False, False, False, False, False],
-                   [False, True, False, False, False, False],
-                   [False, False, True, False, False, False],
-                   [False, False, False, True, False, False],
-                   [False, False, False, False, True, False],
-                   [False, False, False, False, False, True],
-                   [True, True, True, True, True, True]]
+    instance_sizes = [(6, 6), (10, 5), (20, 5), (15, 10), (20, 10)]
 
-    for config in range(9):
-        # Load config and init objects
-        with open("./config.json", 'r') as load_f:
-            load_dict = json.load(load_f)
-        env_paras = copy.deepcopy(load_dict["env_paras"])
-        model_paras = copy.deepcopy(load_dict["model_paras"])
+    for size in instance_sizes:
+        config_names = ["DQN", "DDQN", "PER", "Dueling", "Noisy", "Distributional", "NStep", "Rainbow", "PPO"]
+        config_uses = [[False, False, False, False, False, False],
+                       [True, False, False, False, False, False],
+                       [False, True, False, False, False, False],
+                       [False, False, True, False, False, False],
+                       [False, False, False, True, False, False],
+                       [False, False, False, False, True, False],
+                       [False, False, False, False, False, True],
+                       [True, True, True, True, True, True]]
 
-        extension_paras = copy.deepcopy(load_dict["extensions_paras"])
-        test_paras = copy.deepcopy(load_dict["test_paras"])
+        for config in range(9):
+            # Load config and init objects
+            with open("./config.json", 'r') as load_f:
+                load_dict = json.load(load_f)
+            env_paras = copy.deepcopy(load_dict["env_paras"])
+            model_paras = copy.deepcopy(load_dict["model_paras"])
 
-        if config_names[config] == "PPO":
-            train_paras = copy.deepcopy(load_dict["ppo_paras"])
-            test_paras["is_ppo"] = True
-        else:
-            train_paras = copy.deepcopy(load_dict["dqn_paras"])
-            extension_paras["use_ddqn"] = config_uses[config][0]
-            extension_paras["use_per"] = config_uses[config][1]
-            extension_paras["use_dueling"] = config_uses[config][2]
-            extension_paras["use_noisy"] = config_uses[config][3]
-            extension_paras["use_distributional"] = config_uses[config][4]
-            extension_paras["use_n_step"] = config_uses[config][5]
+            extension_paras = copy.deepcopy(load_dict["extensions_paras"])
+            test_paras = copy.deepcopy(load_dict["test_paras"])
+            test_paras["saved_model_num_jobs"] = size[0]
+            test_paras["saved_model_num_mas"] = size[1]
+            env_paras["num_jobs"] = size[0]
+            env_paras["num_mas"] = size[1]
 
-        train_paras["config_name"] = config_names[config]
-        main(env_paras, model_paras, train_paras, extension_paras, test_paras, config_names[config])
+            if config_names[config] == "PPO":
+                train_paras = copy.deepcopy(load_dict["ppo_paras"])
+                test_paras["is_ppo"] = True
+            else:
+                train_paras = copy.deepcopy(load_dict["dqn_paras"])
+                extension_paras["use_ddqn"] = config_uses[config][0]
+                extension_paras["use_per"] = config_uses[config][1]
+                extension_paras["use_dueling"] = config_uses[config][2]
+                extension_paras["use_noisy"] = config_uses[config][3]
+                extension_paras["use_distributional"] = config_uses[config][4]
+                extension_paras["use_n_step"] = config_uses[config][5]
+
+            train_paras["config_name"] = config_names[config]
+            main(env_paras, model_paras, train_paras, extension_paras, test_paras, config_names[config])
