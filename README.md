@@ -80,10 +80,7 @@ python train_ppo.py
 
 ### Testing
 
-For testing, take into consideration two more parameters in ```test_paras```, which are:
-
-* ```sample```: a boolean variable that sets the decoding to greedy, if ```false```, and softmax sampling, if ```true```.
-* ```num_sample```: is setting ```sample``` to ```true```, this parameter indicate the number of different samples to generate for each benchmark dataset.
+For testing, just set the boolean variable ```is_fjsp``` in ```env_paras``` accordingly.
 
 For randomly generated problems, run:
 
@@ -96,8 +93,6 @@ For benchmark instances, do not forget to set the proper path (```benchmark_path
 ```
 python test_benchmark.py
 ```
-
-Note that there should be model files (```*.pt```) in ```./save```.
 
 ## Acknowledgments
 
