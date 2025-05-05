@@ -1,33 +1,7 @@
 # Unraveling the Rainbow
-Implementation of the paper **Unraveling the Rainbow: can value-based methods schedule?**, 2025.
+Implementation of the paper **Unraveling the Rainbow: can value-based methods schedule?**
 
-[//]: # (```)
-
-[//]: # (@ARTICLE{9826438,  )
-
-[//]: # (   author={Song, Wen and Chen, Xinyang and Li, Qiqiang and Cao, Zhiguang},  )
-
-[//]: # (   journal={IEEE Transactions on Industrial Informatics},   )
-
-[//]: # (   title={Flexible Job Shop Scheduling via Graph Neural Network and Deep Reinforcement Learning},   )
-
-[//]: # (   year={2023},  )
-
-[//]: # (   volume={19},  )
-
-[//]: # (   number={2},  )
-
-[//]: # (   pages={1600-1610},  )
-
-[//]: # (   doi={10.1109/TII.2022.3189725})
-
-[//]: # ( })
-
-[//]: # (```)
-
-## Get Started
-
-### Installation
+### Dependencies
 
 * python $\ge$ 3.11.11
 * pytorch $\ge$ 2.4.0
@@ -66,7 +40,7 @@ If using any Rainbow extensions, set the boolean parameters accordingly in ```ex
 
 ### Training
 
-For training any value-based algorithm, after setting the correct parameters in * ```config.json```, run the following command:
+For training any value-based algorithm, after setting the correct parameters in ```config.json```, run the following command:
 
 ```
 python train_dqn.py
