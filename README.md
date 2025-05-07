@@ -1,4 +1,7 @@
 # Unraveling the Rainbow
+
+[![arXiv](https://img.shields.io/badge/arXiv-2505.03323-b31b1b.svg)](https://arxiv.org/abs/2505.03323)
+
 Implementation of the paper **Unraveling the Rainbow: can value-based methods schedule?**
 
 ### Dependencies
@@ -74,3 +77,19 @@ We would like to thank the following repositories, which served as important fou
 
 * https://github.com/songwenas12/fjsp-drl/tree/main
 * https://github.com/Curt-Park/rainbow-is-all-you-need
+
+## Citation
+
+If you find our work valuable for your research, please cite the paper us:
+
+```
+@misc{corrêa2025unravelingrainbowvaluebasedmethods,
+      title={Unraveling the Rainbow: can value-based methods schedule?}, 
+      author={Arthur Corrêa and Alexandre Jesus and Cristóvão Silva and Samuel Moniz},
+      year={2025},
+      eprint={2505.03323},
+      archivePrefix={arXiv},
+      primaryClass={cs.LG},
+      url={https://arxiv.org/abs/2505.03323}, 
+}
+```
