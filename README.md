@@ -80,7 +80,7 @@ We would like to thank the following repositories, which served as important fou
 
 ## Citation
 
-If you find our work valuable for your research, please cite the paper us:
+If you find our work valuable for your research, please cite us:
 
 ```
 @misc{corrêa2025unravelingrainbowvaluebasedmethods,
