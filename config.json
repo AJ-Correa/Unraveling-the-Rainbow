@@ -1,13 +1,13 @@
 {
   "env_paras": {
-    "num_jobs": 20,
-    "num_mas": 10,
+    "num_jobs": 6,
+    "num_mas": 6,
     "batch_size": 1,
     "ope_feat_dim" : 6,
     "ma_feat_dim" : 3,
     "show_mode": "print",
     "valid_batch_size": 100,
-    "is_fjsp": false
+    "is_fjsp": true
   },
   "model_paras": {
     "in_size_ma": 3,
@@ -23,13 +23,13 @@
     "n_hidden_critic": 3,
     "action_dim": 1,
     "replay_to_cpu": false,
-    "load_state": true,
-    "load_epoch": 10
+    "load_state": false,
+    "load_epoch": 2710
   },
   "dqn_paras": {
-    "lr": 0.0002,
+    "lr": 2e-4,
     "gamma": 0.99,
-    "epochs": 5000,
+    "epochs": 3000,
     "minibatch_size": 32,
     "max_epsilon": 1,
     "min_epsilon": 0.1,
@@ -38,16 +38,16 @@
     "buffer_size": 20000,
     "switch_instance": 1,
     "seed": 14,
-    "config_name": "DQN",
-    "save_output": true
+    "config_name": "Rainbow_noDueling_noDistributional",
+    "save_output": false
   },
   "extensions_paras": {
-    "use_ddqn": false,
-    "use_per": false,
+    "use_ddqn": true,
+    "use_per": true,
     "use_dueling": false,
-    "use_noisy": false,
+    "use_noisy": true,
     "use_distributional": false,
-    "use_n_step": false,
+    "use_n_step": true,
     "use_iqn": false,
     "use_munchausen": false,
     "per_alpha": 0.4,
@@ -55,11 +55,11 @@
     "distributional_atom_size": 51,
     "distributional_v_min": -600,
     "distributional_v_max": -50,
-    "n_step_horizon": 2,
+    "n_step_horizon": 4,
     "iqn_quant_emb_dim": 64,
-    "iqn_num_tau_samples": 16,
-    "iqn_num_quant_samples": 16,
-    "iqn_num_tau_prime_samples": 16,
+    "iqn_num_tau_samples": 32,
+    "iqn_num_quant_samples": 32,
+    "iqn_num_tau_prime_samples": 32,
     "munch_tau": 0.03,
     "munch_alpha": 0.9,
     "munch_clip": -1
@@ -80,14 +80,66 @@
     "parallel_iter": 20,
     "seed": 14,
     "config_name": "PPO",
-    "save_output": true
+    "save_output": false
+  },
+  "a2c_paras": {
+    "lr": 0.0002,
+    "betas": [0.9, 0.999],
+    "gamma": 1.0,
+    "A_coef": 1.0,
+    "vf_coef": 0.5,
+    "entropy_coef": 0.01,
+    "max_iterations": 10,
+    "save_timestep": 10,
+    "update_timestep": 1,
+    "parallel_iter": 32,
+    "seed": 14,
+    "config_name": "A2C",
+    "save_output": false
+  },
+  "vmpo_paras": {
+    "lr": 0.0002,
+    "betas": [0.9, 0.999],
+    "gamma": 1.0,
+    "K_epochs": 3,
+    "init_alpha": 1.0,
+    "init_eta": 1.0,
+    "eps_eta": 0.01,
+    "eps_alpha": [0.001, 0.01],
+    "max_iterations": 10,
+    "save_timestep": 10,
+    "update_timestep": 1,
+    "minibatch_size": 512,
+    "parallel_iter": 20,
+    "seed": 14,
+    "config_name": "VMPO",
+    "save_output": false
+  },
+  "reinforce_paras": {
+    "lr": 0.0002,
+    "betas": [0.9, 0.999],
+    "gamma": 1.0,
+    "A_coef": 1.0,
+    "entropy_coef": 0.01,
+    "max_iterations": 10,
+    "save_timestep": 10,
+    "update_timestep": 1,
+    "minibatch_size": 5000,
+    "parallel_iter": 32,
+    "seed": 14,
+    "config_name": "REINFORCE",
+    "save_output": false
   },
   "test_paras": {
     "sample": false,
+    "topk": 5,
     "is_ppo": false,
+    "is_a2c": false,
+    "is_reinforce": false,
+    "is_vmpo": false,
     "num_sample": 100,
-    "saved_model_num_jobs": 20,
-    "saved_model_num_mas": 10,
-    "benchmark_path": "data_test/JSSP/Public/Lawrence/"
+    "saved_model_num_jobs": 6,
+    "saved_model_num_mas": 6,
+    "benchmark_path": "data_test/FJSP/Public/Brandimarte/"
   }
 }

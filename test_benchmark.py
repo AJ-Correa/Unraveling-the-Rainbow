@@ -9,9 +9,9 @@ import pandas as pd
 import torch
 import numpy as np
 
-import pynvml
-from models import dqn_model, PPO_model
+from models import dqn_model, PPO_model, A2C_model, REINFORCE_model, VMPO_model
 from env.load_data import nums_detec
+
 
 def setup_seed(seed):
     torch.manual_seed(seed)
@@ -20,12 +20,9 @@ def setup_seed(seed):
     random.seed(seed)
     torch.backends.cudnn.deterministic = True
 
-def main(env_paras, model_paras, train_paras, extension_paras, test_paras, config_name=None, instance_size=None, results=None):
-    # PyTorch initialization
-    # gpu_tracker = MemTracker()  # Used to monitor memory (of gpu)
-    pynvml.nvmlInit()
-    handle = pynvml.nvmlDeviceGetHandleByIndex(0)
 
+def main(env_paras, model_paras, train_paras, extension_paras, test_paras, config_name=None, instance_size=None,
+         results=None):
     device = torch.device("cuda:0")
     # device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     if device.type == 'cuda':
@@ -34,7 +31,8 @@ def main(env_paras, model_paras, train_paras, extension_paras, test_paras, confi
     else:
         torch.set_default_tensor_type('torch.FloatTensor')
     print("PyTorch device: ", device.type)
-    torch.set_printoptions(precision=None, threshold=np.inf, edgeitems=None, linewidth=None, profile=None, sci_mode=False)
+    torch.set_printoptions(precision=None, threshold=np.inf, edgeitems=None, linewidth=None, profile=None,
+                           sci_mode=False)
 
     env_paras["device"] = device
     model_paras["device"] = device
@@ -73,12 +71,19 @@ def main(env_paras, model_paras, train_paras, extension_paras, test_paras, confi
 
     if test_paras["is_ppo"]:
         model = PPO_model.PPO(model_paras, train_paras)
+    elif test_paras["is_a2c"]:
+        model = A2C_model.A2C(model_paras, train_paras)
+    elif test_paras["is_reinforce"]:
+        model = REINFORCE_model.REINFORCE(model_paras, train_paras)
+    elif test_paras["is_vmpo"]:
+        model = VMPO_model.VMPO(model_paras, train_paras)
     else:
-        model = dqn_model.Model(model_paras, train_paras, extension_paras)
+        model = dqn_model.Model(model_paras, train_paras, extension_paras, test_paras["topk"])
 
     save_path = './save/{0}/{1}{2}/train_{3}_{4} x {5}'.format(problem_type, test_paras["saved_model_num_jobs"],
-                                                         str.zfill(str(test_paras["saved_model_num_mas"]), 2),
-                                                         train_paras["config_name"], test_paras["saved_model_num_jobs"],
+                                                               str.zfill(str(test_paras["saved_model_num_mas"]), 2),
+                                                               train_paras["config_name"],
+                                                               test_paras["saved_model_num_jobs"],
                                                                test_paras["saved_model_num_mas"])
     files = os.listdir(save_path)
     base_filename = 'save_best_{0}_{1} x {2}_'.format(train_paras["config_name"], test_paras["saved_model_num_jobs"],
@@ -90,6 +95,12 @@ def main(env_paras, model_paras, train_paras, extension_paras, test_paras, confi
             break
     checkpoint_best_model = torch.load(os.path.join(save_path, best_model_match), map_location=device)
     if test_paras["is_ppo"]:
+        model.policy_old.load_state_dict(checkpoint_best_model)
+    elif test_paras["is_a2c"]:
+        model.policy.load_state_dict(checkpoint_best_model)
+    elif test_paras["is_reinforce"]:
+        model.policy.load_state_dict(checkpoint_best_model)
+    elif test_paras["is_vmpo"]:
         model.policy_old.load_state_dict(checkpoint_best_model)
     else:
         model.online_network.load_state_dict(checkpoint_best_model)
@@ -106,7 +117,8 @@ def main(env_paras, model_paras, train_paras, extension_paras, test_paras, confi
 
     if not test_paras["sample"]:
         for instance in test_files:
-            env = gym.make('fjsp-v0', case=[instance], env_paras=env_test_paras, data_source='file', is_public_jssp=is_public_jssp)
+            env = gym.make('fjsp-v0', case=[instance], env_paras=env_test_paras, data_source='file',
+                           is_public_jssp=is_public_jssp)
             env.reset()
             state = env.state
             done = False
@@ -114,31 +126,85 @@ def main(env_paras, model_paras, train_paras, extension_paras, test_paras, confi
             while ~done:
                 with torch.no_grad():
                     if test_paras["is_ppo"]:
-                        actions = model.policy_old.act(state, None, dones, epsilon=0, flag_sample=False, flag_train=False)
+                        actions = model.policy_old.act(state, None, dones, epsilon=0, flag_sample=False,
+                                                       flag_train=False)
+                    elif test_paras["is_a2c"]:
+                        actions = model.policy.act(state, None, dones, epsilon=0, flag_sample=False, flag_train=False)
+                    elif test_paras["is_reinforce"]:
+                        actions = model.policy.act(state, None, dones, epsilon=0, flag_sample=False, flag_train=False)
+                    elif test_paras["is_vmpo"]:
+                        actions = model.policy_old.act(state, None, dones, epsilon=0, flag_sample=False,
+                                                       flag_train=False)
                     else:
-                        actions = model.online_network.act(state, None, dones, epsilon=0, flag_sample=False, flag_train=False)
+                        actions = model.online_network.act(state, None, dones, epsilon=0, flag_sample=False,
+                                                           flag_train=False)
                 state, rewards, dones, _ = env.step(actions)
                 done = dones.all()
-            gantt_result = env.validate_gantt()[0]
-            if not gantt_result:
-                print("Scheduling Error！！！！！！")
+
+            # gantt_result = env.validate_gantt()[0]
+            # if not gantt_result:
+            #    print("Scheduling Error！！！！！！")
+
             makespan = copy.deepcopy(env.makespan_batch.mean()).cpu().item()
             total_makespan += makespan
             if results != None:
                 results[result_column_name].append(makespan)
 
-            print('testing time: ', round(time.time() - start, 2), ' | makespan: ', round(makespan, 2), ' | instance: ', instance.rsplit("/", 1)[-1].split(".", 1)[0])
+            print('testing time: ', round(time.time() - start, 2), ' | makespan: ', round(makespan, 2), ' | instance: ',
+                  instance.rsplit("/", 1)[-1].split(".", 1)[0])
         print('\n', 'average makespan: ', round(total_makespan / len(test_files), 2))
     else:
-        raise Exception("Sampling decoding not implemented for benchmark problems")
+        for instance in test_files:
+            S = test_paras["num_sample"]
+            repeated_instance = [instance for _ in range(S)]
+            env_test_paras["batch_size"] = 1 * S
+            env = gym.make('fjsp-v0', case=repeated_instance, env_paras=env_test_paras, data_source='file',
+                           is_public_jssp=is_public_jssp)
+            env.reset()
+            state = env.state
+            done = False
+            dones = env.done_batch
+            while ~done:
+                with torch.no_grad():
+                    if test_paras["is_ppo"]:
+                        actions = model.policy_old.act(state, None, dones, epsilon=0, flag_sample=True,
+                                                       flag_train=False)
+                    elif test_paras["is_a2c"]:
+                        actions = model.policy.act(state, None, dones, epsilon=0, flag_sample=True, flag_train=False)
+                    elif test_paras["is_reinforce"]:
+                        actions = model.policy.act(state, None, dones, epsilon=0, flag_sample=True, flag_train=False)
+                    elif test_paras["is_vmpo"]:
+                        actions = model.policy_old.act(state, None, dones, epsilon=0, flag_sample=True,
+                                                       flag_train=False)
+                    else:
+                        actions = model.online_network.act(state, None, dones, epsilon=0, flag_sample=True,
+                                                           flag_train=False)
+                state, rewards, dones, _ = env.step(actions)
+                done = dones.all()
+
+            # gantt_result = env.validate_gantt()[0]
+            # if not gantt_result:
+            #    print("Scheduling Error！！！！！！")
+
+            makespans = copy.deepcopy(env.makespan_batch).cpu().numpy()  # shape: (S,)
+            min_makespan = makespans.min()
+            total_makespan += min_makespan
+            if results != None:
+                results[result_column_name].append(min_makespan)
+
+            print('testing time: ', round(time.time() - start, 2), ' | makespan: ', round(min_makespan, 2),
+                  ' | instance: ', instance.rsplit("/", 1)[-1].split(".", 1)[0])
+        print('\n', 'average makespan: ', round(total_makespan / len(test_files), 2))
+
 
 if __name__ == '__main__':
-    instance_sizes = [(6, 6), (10, 5), (20, 5), (15, 10), (20, 10)]
+    instance_sizes = [(10, 5)]
     results = {}
 
     for size in instance_sizes:
 
-        config_names = ["DQN", "DDQN", "PER", "Dueling", "Noisy", "Distributional", "NStep", "Rainbow", "PPO"]
+        config_names = ["DQN", "DDQN", "PER", "Dueling", "Noisy", "Distributional", "NStep", "Rainbow", "PPO", "A2C",
+                        "REINFORCE", "VMPO"]
         config_uses = [[False, False, False, False, False, False],
                        [True, False, False, False, False, False],
                        [False, True, False, False, False, False],
@@ -148,10 +214,10 @@ if __name__ == '__main__':
                        [False, False, False, False, False, True],
                        [True, True, True, True, True, True]]
 
-        for config in range(9):
+        for config in range(12):
             print("#####################################################################################")
             print(f"Running {config_names[config]} model - Instance size: {size[0]}x{size[1]}")
-            
+
             # Load config and init objects
             with open("./config.json", 'r') as load_f:
                 load_dict = json.load(load_f)
@@ -166,6 +232,15 @@ if __name__ == '__main__':
             if config_names[config] == "PPO":
                 train_paras = copy.deepcopy(load_dict["ppo_paras"])
                 test_paras["is_ppo"] = True
+            elif config_names[config] == "A2C":
+                train_paras = copy.deepcopy(load_dict["a2c_paras"])
+                test_paras["is_a2c"] = True
+            elif config_names[config] == "REINFORCE":
+                train_paras = copy.deepcopy(load_dict["reinforce_paras"])
+                test_paras["is_reinforce"] = True
+            elif config_names[config] == "VMPO":
+                train_paras = copy.deepcopy(load_dict["vmpo_paras"])
+                test_paras["is_vmpo"] = True
             else:
                 train_paras = copy.deepcopy(load_dict["dqn_paras"])
                 extension_paras["use_ddqn"] = config_uses[config][0]
@@ -181,5 +256,5 @@ if __name__ == '__main__':
     df = pd.DataFrame(dict([(key, pd.Series(value)) for key, value in results.items()]))
 
     # Save results to an Excel file
-    output_file = "results/results_lawrence.xlsx"
+    output_file = "results/sampling/results_brandimarte.xlsx"
     df.to_excel(output_file, index=False)

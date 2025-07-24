@@ -60,6 +60,7 @@ def main(env_paras, model_paras, train_paras, extension_paras):
     env_valid_paras["batch_size"] = env_paras["valid_batch_size"]
     model_paras["actor_in_dim"] = model_paras["out_size_ma"] * 2 + model_paras["out_size_ope"] * 2
     model_paras["critic_in_dim"] = model_paras["out_size_ma"] + model_paras["out_size_ope"]
+    env_paras["batch_size"] = 1
     problem_type = 'FJSP' if env_paras["is_fjsp"] else 'JSSP'
 
     assert (extension_paras["use_iqn"] + extension_paras["use_distributional"]) <= 1

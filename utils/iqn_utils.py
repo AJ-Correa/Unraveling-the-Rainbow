@@ -1,8 +1,10 @@
 import torch
 import torch.nn.functional as F
 
+
 def compute_iqn_next_scores(model, next_ope_ma_adj, next_raw_opes, next_raw_mas, next_proc_time, next_ope_pre_adj,
-                            next_ope_sub_adj, next_ope_step_batch, next_mask_mas, next_mask_job_procing, next_mask_job_finish, num_quantiles):
+                            next_ope_sub_adj, next_ope_step_batch, next_mask_mas, next_mask_job_procing,
+                            next_mask_job_finish, num_quantiles):
     batch_idxes = torch.arange(0, next_ope_ma_adj.size(-3)).long()
 
     features = (next_raw_opes, next_raw_mas, next_proc_time)
@@ -72,6 +74,7 @@ def compute_iqn_next_scores(model, next_ope_ma_adj, next_raw_opes, next_raw_mas,
         scores = scores.reshape(batch_size, num_quantiles, -1)
         scores = scores
         # scores[~mask] = float('-inf')
+        scores[~mask.unsqueeze(1).expand(-1, scores.size(1), -1)] = -1e9
         # scores[~mask] = -1e9
         # action_probs = F.softmax(scores, dim=1)
     else:
@@ -79,28 +82,25 @@ def compute_iqn_next_scores(model, next_ope_ma_adj, next_raw_opes, next_raw_mas,
         num_mas = h_actions.size()[1]
 
         batch_size = len(batch_idxes)
-        quantiles = torch.rand(batch_size, num_quantiles).to(model.device).unsqueeze(-1)
-        # quantiles = torch.rand(batch_size, num_mas * num_jobs, num_quantiles).to(self.device).unsqueeze(-1)
+        quantiles = torch.rand(batch_size, num_mas * num_jobs, num_quantiles).to(model.device).unsqueeze(-1)
         cos = torch.cos(quantiles * model.pis)
         cos_x = torch.relu(model.cos_embedding(cos))
-        quantile_embedding = cos_x.unsqueeze(1).unsqueeze(1)
-        state_embeddings = h_actions.unsqueeze(3)
-        fused_embeddings = state_embeddings * quantile_embedding
-        # h_actions = h_actions.reshape(batch_size, num_mas * num_jobs, 1, model.actor_dim)
-        # x = (h_actions * cos_x).reshape(batch_size, num_quantiles, num_mas, num_jobs, model.actor_dim)
+        h_actions = h_actions.reshape(batch_size, num_mas * num_jobs, 1, model.actor_dim)
+        x = (h_actions * cos_x).reshape(batch_size, num_quantiles, num_mas, num_jobs, model.actor_dim)
 
-        scores = model.actor(fused_embeddings).reshape(batch_size, num_mas * num_jobs, -1)
-        # scores = model.actor(x).flatten(1)
-        # scores = scores.reshape(batch_size, num_quantiles, -1)
-        # scores = scores
+        scores = model.actor(x).flatten(1)
+        scores = scores.reshape(batch_size, num_quantiles, -1)
+        scores = scores
         # scores[~mask] = float('-inf')
+        scores[~mask.unsqueeze(1).expand(-1, scores.size(1), -1)] = -1e9
         # scores[~mask] = -1e9
         # action_probs = F.softmax(scores, dim=1)
 
     return scores
 
 
-def compute_iqn_scores(model, ope_ma_adj, raw_opes, raw_mas, proc_time, ope_pre_adj, ope_sub_adj, jobs_gather, num_quantiles):
+def compute_iqn_scores(model, ope_ma_adj, raw_opes, raw_mas, proc_time, ope_pre_adj, ope_sub_adj, jobs_gather,
+                       num_quantiles):
     batch_idxes = torch.arange(0, ope_ma_adj.size(-3)).long()
 
     features = (raw_opes, raw_mas, proc_time)
@@ -155,25 +155,21 @@ def compute_iqn_scores(model, ope_ma_adj, raw_opes, raw_mas, proc_time, ope_pre_
         num_mas = h_actions.size()[1]
 
         batch_size = len(batch_idxes)
-        quantiles = torch.rand(batch_size, num_quantiles).to(model.device).unsqueeze(-1)
-        # quantiles = torch.rand(batch_size, num_mas * num_jobs, num_quantiles).to(self.device).unsqueeze(-1)
+        quantiles = torch.rand(batch_size, num_mas * num_jobs, num_quantiles).to(model.device).unsqueeze(-1)
         cos = torch.cos(quantiles * model.pis)
         cos_x = torch.relu(model.cos_embedding(cos))
-        quantile_embedding = cos_x.unsqueeze(1).unsqueeze(1)
-        state_embeddings = h_actions.unsqueeze(3)
-        fused_embeddings = state_embeddings * quantile_embedding
-        # h_actions = h_actions.reshape(batch_size, num_mas * num_jobs, 1, model.actor_dim)
-        # x = (h_actions * cos_x).reshape(batch_size, num_quantiles, num_mas, num_jobs, model.actor_dim)
+        h_actions = h_actions.reshape(batch_size, num_mas * num_jobs, 1, model.actor_dim)
+        x = (h_actions * cos_x).reshape(batch_size, num_quantiles, num_mas, num_jobs, model.actor_dim)
 
-        scores = model.actor(fused_embeddings).reshape(batch_size, num_mas * num_jobs, -1)
-        # scores = model.actor(x).flatten(1)
-        # scores = scores.reshape(batch_size, num_quantiles, -1)
-        # scores = scores
+        scores = model.actor(x).flatten(1)
+        scores = scores.reshape(batch_size, num_quantiles, -1)
+        scores = scores
         # scores[~mask] = float('-inf')
         # scores[~mask] = -1e9
         # action_probs = F.softmax(scores, dim=1)
 
     return scores
+
 
 def compute_iqn_loss(online_network, target_network, num_tau_samples,
                      num_quant_samples, num_tau_prime_samples, samples, gamma):
@@ -203,15 +199,22 @@ def compute_iqn_loss(online_network, target_network, num_tau_samples,
     batch_size = len(torch.arange(0, ope_ma_adj.size(-3)).long())
 
     if online_network.use_munch:
-        replay_net_target_quantile_values = compute_iqn_next_scores(target_network, next_ope_ma_adj, next_raw_opes, next_raw_mas, next_proc_time, next_ope_pre_adj,
-                            next_ope_sub_adj, next_ope_step_batch, next_mask_mas, next_mask_job_procing, next_mask_job_finish, num_tau_prime_samples).mean(dim=1)
+        replay_net_target_quantile_values = compute_iqn_next_scores(target_network, next_ope_ma_adj, next_raw_opes,
+                                                                    next_raw_mas, next_proc_time, next_ope_pre_adj,
+                                                                    next_ope_sub_adj, next_ope_step_batch,
+                                                                    next_mask_mas, next_mask_job_procing,
+                                                                    next_mask_job_finish, num_tau_prime_samples).mean(
+            dim=1)
 
-        target_next_quantile_values_action = compute_iqn_next_scores(target_network, next_ope_ma_adj, next_raw_opes, next_raw_mas, next_proc_time, next_ope_pre_adj,
-                            next_ope_sub_adj, next_ope_step_batch, next_mask_mas, next_mask_job_procing, next_mask_job_finish, num_quant_samples)
+        target_next_quantile_values_action = compute_iqn_next_scores(target_network, next_ope_ma_adj, next_raw_opes,
+                                                                     next_raw_mas, next_proc_time, next_ope_pre_adj,
+                                                                     next_ope_sub_adj, next_ope_step_batch,
+                                                                     next_mask_mas, next_mask_job_procing,
+                                                                     next_mask_job_finish, num_quant_samples)
         _replay_next_target_q_values = target_next_quantile_values_action.mean(dim=1)
 
         q_state_values = compute_iqn_scores(target_network, ope_ma_adj, raw_opes, raw_mas, proc_time,
-                                                      ope_pre_adj, ope_sub_adj, jobs_gather, num_quant_samples).mean(dim=1)
+                                            ope_pre_adj, ope_sub_adj, jobs_gather, num_quant_samples).mean(dim=1)
         _replay_target_q_values = q_state_values
 
         y = _replay_next_target_q_values - _replay_next_target_q_values.max(dim=0, keepdim=True)[0]
@@ -238,37 +241,57 @@ def compute_iqn_loss(online_network, target_network, num_tau_samples,
                 gamma * target_quantile_vals * mask.unsqueeze(-1))
     else:
         if not online_network.use_ddqn:
-            target_quantile_vals = compute_iqn_next_scores(target_network, next_ope_ma_adj, next_raw_opes, next_raw_mas, next_proc_time, next_ope_pre_adj,
-                                next_ope_sub_adj, next_ope_step_batch, next_mask_mas, next_mask_job_procing, next_mask_job_finish, num_tau_prime_samples)
-            outputs_action = compute_iqn_next_scores(target_network, next_ope_ma_adj, next_raw_opes, next_raw_mas, next_proc_time, next_ope_pre_adj,
-                                next_ope_sub_adj, next_ope_step_batch, next_mask_mas, next_mask_job_procing, next_mask_job_finish, num_quant_samples)
-            outputs_action = outputs_action.detach().max(1)[1].unsqueeze(1)  # (batch_size, 1, N)
-            target_quantile_vals = target_quantile_vals.gather(1, outputs_action)
+            target_quantile_vals = compute_iqn_next_scores(target_network, next_ope_ma_adj, next_raw_opes, next_raw_mas,
+                                                           next_proc_time, next_ope_pre_adj,
+                                                           next_ope_sub_adj, next_ope_step_batch, next_mask_mas,
+                                                           next_mask_job_procing, next_mask_job_finish,
+                                                           num_tau_prime_samples)
+            outputs_action = compute_iqn_next_scores(target_network, next_ope_ma_adj, next_raw_opes, next_raw_mas,
+                                                     next_proc_time, next_ope_pre_adj,
+                                                     next_ope_sub_adj, next_ope_step_batch, next_mask_mas,
+                                                     next_mask_job_procing, next_mask_job_finish, num_quant_samples)
+            outputs_action = outputs_action.max(2)[1].unsqueeze(1)  # (batch_size, 1, N)
+            target_quantile_vals = target_quantile_vals.gather(2, outputs_action).detach()
         else:
-            target_quantile_vals = compute_iqn_next_scores(target_network, next_ope_ma_adj, next_raw_opes, next_raw_mas, next_proc_time, next_ope_pre_adj,
-                                next_ope_sub_adj, next_ope_step_batch, next_mask_mas, next_mask_job_procing, next_mask_job_finish, num_tau_prime_samples)
-            outputs_action = compute_iqn_next_scores(online_network, next_ope_ma_adj, next_raw_opes, next_raw_mas, next_proc_time, next_ope_pre_adj,
-                                next_ope_sub_adj, next_ope_step_batch, next_mask_mas, next_mask_job_procing, next_mask_job_finish, num_quant_samples)
-            outputs_action = outputs_action.detach().max(1)[1].unsqueeze(1)  # (batch_size, 1, N)
-            target_quantile_vals = target_quantile_vals.gather(1, outputs_action)
+            target_quantile_vals = compute_iqn_next_scores(target_network, next_ope_ma_adj, next_raw_opes, next_raw_mas,
+                                                           next_proc_time, next_ope_pre_adj,
+                                                           next_ope_sub_adj, next_ope_step_batch, next_mask_mas,
+                                                           next_mask_job_procing, next_mask_job_finish,
+                                                           num_tau_prime_samples)
+            outputs_action = compute_iqn_next_scores(online_network, next_ope_ma_adj, next_raw_opes, next_raw_mas,
+                                                     next_proc_time, next_ope_pre_adj,
+                                                     next_ope_sub_adj, next_ope_step_batch, next_mask_mas,
+                                                     next_mask_job_procing, next_mask_job_finish, num_quant_samples)
+            outputs_action = outputs_action.max(2)[1].unsqueeze(1)  # (batch_size, 1, N)
+            target_quantile_vals = target_quantile_vals.gather(2, outputs_action).detach()
 
         mask = ~dones
         target_quantile_vals = rewards.unsqueeze(-1) + (
                 gamma * target_quantile_vals * mask.unsqueeze(-1))
 
     chosen_action_quantile_values = compute_iqn_scores(online_network, ope_ma_adj, raw_opes, raw_mas, proc_time,
-                                                      ope_pre_adj, ope_sub_adj, jobs_gather, num_tau_samples)
-    chosen_action_quantile_values = chosen_action_quantile_values.gather(1, actions.unsqueeze(-1).expand(batch_size,
-                                                                                                        num_tau_samples,
-                                                                                                        1))
+                                                       ope_pre_adj, ope_sub_adj, jobs_gather, num_tau_samples)
+    chosen_action_quantile_values = chosen_action_quantile_values.gather(2, actions.unsqueeze(-1).expand(batch_size,
+                                                                                                         num_tau_samples,
+                                                                                                         1))
 
     quantiles = torch.rand(batch_size, num_tau_samples).to(online_network.device).unsqueeze(-1)
-    bellman_errors = target_quantile_vals - chosen_action_quantile_values
-    huber_loss = abs(bellman_errors.abs() <= 1) * 0.5 * bellman_errors.pow(2) + abs(
-        bellman_errors.abs() > 1) * 1 * (bellman_errors.abs() - 0.5 * 1)
-    quantil_l = abs(quantiles - (bellman_errors.detach() < 0).float()) * huber_loss / 1
 
-    loss = quantil_l.sum(dim=1).mean(dim=1)
+    bellman_errors = target_quantile_vals - chosen_action_quantile_values
+    huber_kappa = 1.0
+    abs_error = bellman_errors.abs()
+    huber_loss = torch.where(
+        abs_error <= huber_kappa,
+        0.5 * bellman_errors.pow(2),
+        huber_kappa * (abs_error - 0.5 * huber_kappa)
+    )
+
+    # Quantile weights: shape (batch, N, 1)
+    quantile_weights = torch.abs(quantiles - (bellman_errors.detach() < 0).float())
+
+    # Final quantile regression loss
+    quantile_loss = quantile_weights * huber_loss  # shape (batch, N, 1)
+    loss = quantile_loss.sum(dim=1).mean(dim=1)
     if not online_network.use_per:
         loss = loss.mean()
 

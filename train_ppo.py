@@ -9,7 +9,6 @@ import gym
 import pandas as pd
 import torch
 import numpy as np
-from visdom import Visdom
 
 from models import PPO_model
 from env.case_generator import CaseGenerator
@@ -58,6 +57,7 @@ def main(env_paras, model_paras, train_paras):
     env_valid_paras["batch_size"] = env_paras["valid_batch_size"]
     model_paras["actor_in_dim"] = model_paras["out_size_ma"] * 2 + model_paras["out_size_ope"] * 2
     model_paras["critic_in_dim"] = model_paras["out_size_ma"] + model_paras["out_size_ope"]
+    env_paras["batch_size"] = train_paras["parallel_iter"]
     problem_type = 'FJSP' if env_paras["is_fjsp"] else 'JSSP'
 
     seed = train_paras["seed"]
@@ -75,7 +75,7 @@ def main(env_paras, model_paras, train_paras):
     opes_per_job_max = int(num_mas * 1.2) if env_paras["is_fjsp"] else 1
 
     memories = PPO_model.Memory()
-    model = PPO_model.PPO(model_paras, train_paras, num_envs=env_paras["batch_size"])
+    model = PPO_model.PPO(model_paras, train_paras, num_envs=train_paras["parallel_iter"])
     start_epoch = 1
     best_model = deque()
     current_model = deque()
@@ -128,7 +128,7 @@ def main(env_paras, model_paras, train_paras):
                                                                        train_paras["config_name"], f"{num_jobs} x {num_mas}", start_epoch - 1))
 
             checkpoint_best_model = torch.load(os.path.join(save_path, best_model_match), map_location=device)
-            best_ppo_model = PPO_model.PPO(model_paras, train_paras, num_envs=env_paras["batch_size"])
+            best_ppo_model = PPO_model.PPO(model_paras, train_paras, num_envs=train_paras["parallel_iter"])
             best_ppo_model.policy_old.load_state_dict(checkpoint_best_model)
             makespan_best, _ = validate(env_valid_paras, env_valid, best_ppo_model.policy_old)
             del best_ppo_model
@@ -220,9 +220,9 @@ def main(env_paras, model_paras, train_paras):
 if __name__ == '__main__':
     config_name = "PPO"
     # instance_sizes = [(6, 6), (10, 5), (20, 5), (15, 10), (20, 10)]
-    instance_sizes = [(20, 10)]
+    instance_sizes = [(6, 6)]
 
-    problem_types = ["JSSP"]
+    problem_types = ["FJSP"]
 
     for problem in problem_types:
         for size in instance_sizes:

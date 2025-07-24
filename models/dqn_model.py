@@ -9,7 +9,7 @@ import torch.nn.functional as F
 from torch.nn.utils import clip_grad_norm_
 from torch.distributions import Categorical
 from network.hgnn import GATedge, MLPsim
-from network.mlp import MLPCritic, MLPActor, ValueStream
+from network.mlp import MLPActor, ValueStream
 from network.noisy_layer import NoisyLinear
 from utils.c51_utils import compute_c51_loss
 from utils.iqn_utils import compute_iqn_loss
@@ -91,7 +91,7 @@ class MLPs(nn.Module):
 
 
 class HGNNScheduler(nn.Module):
-    def __init__(self, model_paras, extension_paras):
+    def __init__(self, model_paras, extension_paras, topk=1):
         super(HGNNScheduler, self).__init__()
         self.device = model_paras["device"]
         self.in_size_ma = model_paras["in_size_ma"]  # Dimension of the raw feature vectors of machine nodes
@@ -100,11 +100,8 @@ class HGNNScheduler(nn.Module):
         self.out_size_ope = model_paras["out_size_ope"]  # Dimension of the embedding of operation nodes
         self.hidden_size_ope = model_paras["hidden_size_ope"]  # Hidden dimensions of the MLPs
         self.actor_dim = model_paras["actor_in_dim"]  # Input dimension of actor
-        self.critic_dim = model_paras["critic_in_dim"]  # Input dimension of critic
         self.n_latent_actor = model_paras["n_latent_actor"]  # Hidden dimensions of the actor
-        self.n_latent_critic = model_paras["n_latent_critic"]  # Hidden dimensions of the critic
         self.n_hidden_actor = model_paras["n_hidden_actor"]  # Number of layers in actor
-        self.n_hidden_critic = model_paras["n_hidden_critic"]  # Number of layers in critic
         self.action_dim = model_paras["action_dim"]  # Output dimension of actor
 
         # len() means of the number of HGNN iterations
@@ -131,6 +128,7 @@ class HGNNScheduler(nn.Module):
         self.munch_tau = extension_paras["munch_tau"]
         self.munch_alpha = extension_paras["munch_alpha"]
         self.munch_clip = extension_paras["munch_clip"]
+        self.topk = topk
         self.transition = list()
 
         # Machine node embedding
@@ -285,7 +283,7 @@ class HGNNScheduler(nn.Module):
         # shape: [len(batch_idxes), num_mas, num_jobs, out_size_ma*2+out_size_ope*2]
         h_actions = torch.cat((h_jobs_padding, h_mas_padding, h_opes_pooled_padding, h_mas_pooled_padding),
                               dim=-1).transpose(1, 2)
-        h_pooled = torch.cat((h_opes_pooled, h_mas_pooled), dim=-1)  # deprecated
+        # h_pooled = torch.cat((h_opes_pooled, h_mas_pooled), dim=-1)  # deprecated
         mask = eligible.transpose(1, 2).flatten(1)
 
         if self.use_dueling:
@@ -384,11 +382,11 @@ class HGNNScheduler(nn.Module):
             copy.deepcopy(jobs_gather)
         ],)
 
-        return scores, ope_step_batch, h_pooled
+        return scores, ope_step_batch
 
     def act(self, state, memories, dones, epsilon, flag_sample=False, flag_train=True, num_quantiles=32):
         # Get probability of actions and the id of the current operation (be waiting to be processed) of each job
-        scores, ope_step_batch, _ = self.get_action_prob(state, memories, flag_sample, flag_train=flag_train, num_quantiles=num_quantiles)
+        scores, ope_step_batch = self.get_action_prob(state, memories, flag_sample, flag_train=flag_train, num_quantiles=num_quantiles)
 
         if flag_train:
             if self.use_noisy:
@@ -402,14 +400,15 @@ class HGNNScheduler(nn.Module):
                 else:
                     action_indexes = scores.argmax(dim=1)
         else:
-            # DRL-S, sampling actions
-            action_probs = F.softmax(scores, dim=1)
             if flag_sample:
-                dist = Categorical(action_probs)
-                action_indexes = dist.sample()
+                topk_scores, topk_indices = torch.topk(scores, k=self.topk, dim=1)
+                topk_probs = F.softmax(topk_scores, dim=1)
+                dist = Categorical(topk_probs)
+                topk_sampled_idx = dist.sample().unsqueeze(1)  # Shape: (batch_size, 1)
+                action_indexes = topk_indices.gather(1, topk_sampled_idx).squeeze(1)
             # DRL-G, greedily picking actions with the maximum q_value
             else:
-                action_indexes = action_probs.argmax(dim=1)
+                action_indexes = scores.argmax(dim=1)
 
         # Calculate the machine, job and operation index based on the action index
         mas = (action_indexes / state.mask_job_finish_batch.size(1)).long()
@@ -453,7 +452,7 @@ class HGNNScheduler(nn.Module):
         ],)
 
 class Model:
-    def __init__(self, model_paras, train_paras, extension_paras):
+    def __init__(self, model_paras, train_paras, extension_paras, topk):
         self.lr = train_paras["lr"]  # learning rate
         self.gamma = train_paras["gamma"]  # discount factor
         self.device = model_paras["device"]  # PyTorch device
@@ -479,7 +478,7 @@ class Model:
         self.munch_alpha = extension_paras["munch_alpha"]
         self.munch_clip = extension_paras["munch_clip"]
 
-        self.online_network = HGNNScheduler(model_paras, extension_paras).to(self.device)
+        self.online_network = HGNNScheduler(model_paras, extension_paras, topk).to(self.device)
         self.target_network = copy.deepcopy(self.online_network)
         self.target_network.load_state_dict(self.online_network.state_dict())
         self.optimizer = torch.optim.Adam(self.online_network.parameters(), lr=self.lr)
@@ -665,7 +664,7 @@ class Model:
         # shape: [len(batch_idxes), num_mas, num_jobs, out_size_ma*2+out_size_ope*2]
         h_actions = torch.cat((h_jobs_padding, h_mas_padding, h_opes_pooled_padding, h_mas_pooled_padding),
                               dim=-1).transpose(1, 2)
-        h_pooled = torch.cat((h_opes_pooled, h_mas_pooled), dim=-1)  # deprecated
+        # h_pooled = torch.cat((h_opes_pooled, h_mas_pooled), dim=-1)  # deprecated
         mask = eligible.transpose(1, 2).flatten(1)
 
         if self.use_dueling:
@@ -727,7 +726,7 @@ class Model:
 
         h_actions = torch.cat((h_jobs_padding, h_mas_padding, h_opes_pooled_padding, h_mas_pooled_padding),
                               dim=-1).transpose(1, 2)
-        h_pooled = torch.cat((h_opes_pooled, h_mas_pooled), dim=-1)
+        # h_pooled = torch.cat((h_opes_pooled, h_mas_pooled), dim=-1)
 
         if self.use_dueling:
             value = model.value_stream(h_actions).reshape(-1, 1)

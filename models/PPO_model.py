@@ -353,8 +353,8 @@ class HGNNScheduler(nn.Module):
         state_values = self.critic(h_pooled)
         dist = Categorical(action_probs.squeeze())
         action_logprobs = dist.log_prob(action_envs)
-        dist_entropys = dist.entropy()
-        return action_logprobs, state_values.squeeze().double(), dist_entropys
+        dist_entropies = dist.entropy()
+        return action_logprobs, state_values.squeeze().double(), dist_entropies
 
 
 class PPO:
