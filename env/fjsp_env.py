@@ -87,11 +87,27 @@ class FJSPEnv(gym.Env):
         lines = []
         if data_source == 'case':  # Generate instances through generators
             lines = [case.get_case(i)[0] for i in range(self.batch_size)]
+            self.lines = lines
             nums = [nums_detec(line) for line in lines]
             num_jobs_list, num_mas_list, num_opes_list = zip(*nums)
             self.num_jobs = num_jobs_list[0]  # Assuming same for all? Otherwise you need a decision here
             self.num_mas = num_mas_list[0]  # Ditto
             self.num_opes = max(self.num_opes, max(num_opes_list))  # Keep max over batch
+            batch_loads = [load_fjs(line, self.num_mas, self.num_opes, self.is_public_jssp) for line in lines]
+        elif data_source == 'public':
+            lines = open(case).readlines()
+            if self.is_public_jssp:
+                instance = nums_detec_jssp(lines)
+                results = [instance for _ in range(self.batch_size)]
+            else:
+                instance = nums_detec(lines)
+                results = [instance for _ in range(self.batch_size)]
+            num_jobs_list, num_mas_list, num_opes_list = zip(*results)
+            self.num_jobs = num_jobs_list[0]
+            self.num_mas = num_mas_list[0]
+            self.num_opes = max(self.num_opes, max(num_opes_list))
+            batch_load = load_fjs(lines, self.num_mas, self.num_opes, self.is_public_jssp)
+            batch_loads = [batch_load for _ in range(self.batch_size)]
         else:  # Load instances from files
             lines = [open(path).readlines() for path in case[:self.batch_size]]
             if self.is_public_jssp:
@@ -102,9 +118,9 @@ class FJSPEnv(gym.Env):
             self.num_jobs = num_jobs_list[0]
             self.num_mas = num_mas_list[0]
             self.num_opes = max(self.num_opes, max(num_opes_list))
+            batch_loads = [load_fjs(line, self.num_mas, self.num_opes, self.is_public_jssp) for line in lines]
 
         # load feats
-        batch_loads = [load_fjs(line, self.num_mas, self.num_opes, self.is_public_jssp) for line in lines]
         for j, tensor in enumerate(tensors):
             tensor.extend(load_data[j] for load_data in batch_loads)
 
@@ -250,11 +266,17 @@ class FJSPEnv(gym.Env):
         start_ope = self.num_ope_biases_batch[self.batch_idxes, jobs]
         end_ope = self.end_ope_biases_batch[self.batch_idxes, jobs]
 
-        for b_idx, start, end in zip(self.batch_idxes, start_ope, end_ope):
-            self.feat_opes_batch[b_idx, 3, start:end + 1] -= 1
+        # for b_idx, start, end in zip(self.batch_idxes, start_ope, end_ope):
+        #     self.feat_opes_batch[b_idx, 3, start:end + 1] -= 1
 
-        # for i in range(self.batch_idxes.size(0)):
-        #    self.feat_opes_batch[self.batch_idxes[i], 3, start_ope[i]:end_ope[i]+1] -= 1
+        batch_size = len(self.batch_idxes)  # actual number of instances in this batch
+        num_ops = self.feat_opes_batch.shape[2]
+
+        ops = torch.arange(num_ops, device=self.device).unsqueeze(0).expand(batch_size, num_ops)
+        mask = (ops >= start_ope[:, None]) & (ops <= end_ope[:, None])
+
+        # apply only to the relevant batch indices
+        self.feat_opes_batch[self.batch_idxes, 3, :] -= mask.float()
 
         # Update 'Start time' and 'Job completion time'
         self.feat_opes_batch[self.batch_idxes, 5, opes] = self.time[self.batch_idxes]
@@ -268,9 +290,9 @@ class FJSPEnv(gym.Env):
         self.feat_opes_batch[self.batch_idxes, 5, :] = start_times + estimate_times
         end_time_batch = (self.feat_opes_batch[self.batch_idxes, 5, :] +
                           self.feat_opes_batch[self.batch_idxes, 2, :]).gather(1, self.end_ope_biases_batch[
-                                                                                  self.batch_idxes, :])
+            self.batch_idxes, :])
         self.feat_opes_batch[self.batch_idxes, 4, :] = convert_feat_job_2_ope(end_time_batch, self.opes_appertain_batch[
-                                                                                              self.batch_idxes, :])
+            self.batch_idxes, :])
 
         # Update partial schedule (state)
         self.schedules_batch[self.batch_idxes, opes, :2] = torch.stack((torch.ones(self.batch_idxes.size(0)), mas),
@@ -373,10 +395,14 @@ class FJSPEnv(gym.Env):
         utiliz = utiliz.div(self.time[:, None] + 1e-5)
         self.feat_mas_batch[:, 2, :] = utiliz
 
-        jobs = torch.where(d, self.machines_batch[:, :, 3].double(), -1.0).float()
-        jobs_index = np.argwhere(jobs.cpu() >= 0).to(self.device)
-        job_idxes = jobs[jobs_index[0], jobs_index[1]].long()
-        batch_idxes = jobs_index[0]
+        jobs = torch.where(d, self.machines_batch[:, :, 3].float(), torch.tensor(-1.0, device=d.device))
+
+        # Get indices where jobs >= 0, using torch.nonzero (PyTorch equivalent to np.argwhere)
+        jobs_index = torch.nonzero(jobs >= 0, as_tuple=False)  # shape: (num_valid, 2)
+
+        # Extract job indices and batch indices directly
+        batch_idxes = jobs_index[:, 0]
+        job_idxes = jobs[batch_idxes, jobs_index[:, 1]].long()
 
         self.mask_job_procing_batch[batch_idxes, job_idxes] = False
         self.mask_ma_procing_batch[d] = False

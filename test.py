@@ -11,6 +11,7 @@ import numpy as np
 
 from models import dqn_model, PPO_model, A2C_model, REINFORCE_model, VMPO_model
 from env.load_data import nums_detec
+from utils.my_utils import pomo_starting_nodes, repeat_instances_by_starting_nodes
 
 
 def setup_seed(seed):
@@ -119,7 +120,7 @@ def main(env_paras, model_paras, train_paras, extension_paras, test_paras, confi
     start = time.time()
     print('There are {0} dev instances.'.format(len(test_files)))  # validation set is also called development set
 
-    if not test_paras["sample"]:
+    if not test_paras["sample"] and test_paras["pomo_starting_nodes"] == False:
         env.reset()
         state = env.state
         done = False
@@ -145,7 +146,53 @@ def main(env_paras, model_paras, train_paras, extension_paras, test_paras, confi
         #    print("Scheduling Error！！！！！！")
         makespan = copy.deepcopy(env.makespan_batch.mean())
 
-        print('testing time: ', round(time.time() - start, 2), ' | average makespan: ', round(makespan.item(), 2), '\n')
+        print('testing time: ', round(time.time() - start, 2), 's | average makespan: ', round(makespan.item(), 2), '\n')
+    elif not test_paras["sample"] and test_paras["pomo_starting_nodes"] == True:
+        is_public_jssp = False if problem_type == "FJSP" else True
+
+        repeated_instances, actions_tensor, env, instance_splits = repeat_instances_by_starting_nodes(
+            test_files, copy.deepcopy(env_test_paras), is_public_jssp)
+
+        state = env.state
+        done = False
+        dones = env.done_batch
+        first_timestep = True
+        while ~done:
+            with torch.no_grad():
+                if first_timestep:
+                    first_timestep = False
+                    actions = actions_tensor
+                else:
+                    if test_paras["is_ppo"]:
+                        actions = model.policy_old.act(state, None, dones, epsilon=0, flag_sample=False,
+                                                       flag_train=False)
+                    elif test_paras["is_a2c"]:
+                        actions = model.policy.act(state, None, dones, epsilon=0, flag_sample=False, flag_train=False)
+                    elif test_paras["is_reinforce"]:
+                        actions = model.policy.act(state, None, dones, epsilon=0, flag_sample=False, flag_train=False)
+                    elif test_paras["is_vmpo"]:
+                        actions = model.policy_old.act(state, None, dones, epsilon=0, flag_sample=False,
+                                                       flag_train=False)
+                    else:
+                        actions = model.online_network.act(state, None, dones, epsilon=0, flag_sample=False,
+                                                           flag_train=False)
+
+            state, rewards, dones, _ = env.step(actions)
+            done = dones.all()
+
+        # Compute best per original instance
+        makespans = env.makespan_batch.cpu()  # shape: total_num_starting_nodes
+        best_per_instance = []
+        idx = 0
+        for num_nodes in instance_splits:
+            instance_best = makespans[idx: idx + num_nodes].min().item()
+            best_per_instance.append(instance_best)
+            idx += num_nodes
+
+        average_makespan = sum(best_per_instance) / len(best_per_instance)
+
+        print('testing time: ', round(time.time() - start, 2), 's | average makespan: ',
+              round(average_makespan, 2), '\n')
     else:
         best_makespans = torch.full_like(env.makespan_batch, float('inf'))
 
@@ -181,25 +228,27 @@ def main(env_paras, model_paras, train_paras, extension_paras, test_paras, confi
         # if you still want average makespan per algorithm:
         avg_makespan = best_per_instance.mean().item()
 
-        print('testing time: ', round(time.time() - start, 2), ' | average makespan: ',
+        print('testing time: ', round(time.time() - start, 2), 's | average makespan: ',
               round(avg_makespan, 2), '\n')
 
     if test_paras["sample"]:
         return best_per_instance.cpu().numpy()
+    elif test_paras["pomo_starting_nodes"]:
+        return best_per_instance
     else:
         return env.makespan_batch.cpu().numpy()
 
 
 if __name__ == '__main__':
 
-    instance_sizes = [(6, 6), (10, 5), (20, 5), (15, 10), (20, 10), (30, 10), (40, 10)]
-    problem_types = ["FJSP", "JSSP"]
+    # instance_sizes = [(6, 6), (10, 5), (20, 5), (15, 10), (20, 10), (30, 10), (40, 10)]
+    instance_sizes = [(50, 20), (100, 20)]
+    problem_types = ["FJSP"]
     writer = pd.ExcelWriter("testing_results.xlsx", engine="openpyxl")
 
-    for size in instance_sizes:
-        size_results = []
-
-        for problem in problem_types:
+    for problem in problem_types:
+        for size in instance_sizes:
+            size_results = []
             config_names = ["DQN", "DDQN", "PER", "Dueling", "Noisy", "Distributional", "NStep", "Rainbow", "PPO",
                             "A2C", "REINFORCE", "VMPO"]
             config_uses = [[False, False, False, False, False, False],
@@ -226,6 +275,9 @@ if __name__ == '__main__':
                 if size[0] == 30 or size[0] == 40:
                     test_paras["saved_model_num_jobs"] = 20
                     test_paras["saved_model_num_mas"] = 10
+                elif size[0] == 50 or size[0] == 100:
+                    test_paras["saved_model_num_jobs"] = 6
+                    test_paras["saved_model_num_mas"] = 6
                 else:
                     test_paras["saved_model_num_jobs"] = size[0]
                     test_paras["saved_model_num_mas"] = size[1]
@@ -256,6 +308,7 @@ if __name__ == '__main__':
 
                 train_paras["config_name"] = config_names[config]
                 makespans = main(env_paras, model_paras, train_paras, extension_paras, test_paras, config_names[config])
+
                 for idx, obj in enumerate(makespans):
                     size_results.append({
                         "Algorithm": config_names[config],
@@ -266,52 +319,7 @@ if __name__ == '__main__':
 
         df = pd.DataFrame(size_results)
         sheet_name = f"{size[0]}x{size[1]}"
-        df.to_excel(writer, sheet_name=sheet_name, index=False)
+        # df.to_excel(writer, sheet_name=sheet_name, index=False)
 
     writer.close()
-    print("✅ Results saved to 'testing_results.xlsx'")
-
-    """instance_sizes = [(6, 6), (10, 5), (20, 5), (15, 10), (20, 10), (30, 10), (40, 10)]
-    config_name = "VMPO"
-    problem_type = "FJSP"
-
-    for size in instance_sizes:
-
-        print("#####################################################################################")
-        print(f"Running {config_name} model - Instance size: {size[0]}x{size[1]}")
-
-        # Load config and init objects
-        with open("./config.json", 'r') as load_f:
-            load_dict = json.load(load_f)
-        env_paras = copy.deepcopy(load_dict["env_paras"])
-        model_paras = copy.deepcopy(load_dict["model_paras"])
-
-        extension_paras = copy.deepcopy(load_dict["extensions_paras"])
-        test_paras = copy.deepcopy(load_dict["test_paras"])
-        if size[0] == 30 or size[0] == 40:
-            test_paras["saved_model_num_jobs"] = 20
-            test_paras["saved_model_num_mas"] = 10
-        else:
-            test_paras["saved_model_num_jobs"] = size[0]
-            test_paras["saved_model_num_mas"] = size[1]
-        env_paras["num_jobs"] = size[0]
-        env_paras["num_mas"] = size[1]
-        env_paras["is_fjsp"] = True if problem_type == "FJSP" else False
-
-        if config_name == "PPO":
-            train_paras = copy.deepcopy(load_dict["ppo_paras"])
-            test_paras["is_ppo"] = True
-        elif config_name == "A2C":
-            train_paras = copy.deepcopy(load_dict["a2c_paras"])
-            test_paras["is_a2c"] = True
-        elif config_name == "REINFORCE":
-            train_paras = copy.deepcopy(load_dict["reinforce_paras"])
-            test_paras["is_reinforce"] = True
-        elif config_name == "VMPO":
-            train_paras = copy.deepcopy(load_dict["vmpo_paras"])
-            test_paras["is_vmpo"] = True
-        else:
-            train_paras = copy.deepcopy(load_dict["dqn_paras"])
-
-        train_paras["config_name"] = config_name
-        main(env_paras, model_paras, train_paras, extension_paras, test_paras, config_name)"""
+    # print("✅ Results saved to 'testing_results.xlsx'")

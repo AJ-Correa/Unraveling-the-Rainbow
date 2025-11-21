@@ -19,6 +19,7 @@ class MLPs(nn.Module):
     '''
     MLPs in operation node embedding
     '''
+
     def __init__(self, W_sizes_ope, hidden_size_ope, out_size_ope, num_head, dropout, noisy=False):
         '''
         The multi-head and dropout mechanisms are not actually used in the final experiment.
@@ -134,27 +135,32 @@ class HGNNScheduler(nn.Module):
         # Machine node embedding
         self.get_machines = nn.ModuleList()
         self.get_machines.append(GATedge((self.in_size_ope, self.in_size_ma), self.out_size_ma, self.num_heads[0],
-                                    self.dropout, self.dropout, activation=F.elu, noisy=self.use_noisy))
-        for i in range(1,len(self.num_heads)):
+                                         self.dropout, self.dropout, activation=F.elu, noisy=self.use_noisy))
+        for i in range(1, len(self.num_heads)):
             self.get_machines.append(GATedge((self.out_size_ope, self.out_size_ma), self.out_size_ma, self.num_heads[i],
-                                    self.dropout, self.dropout, activation=F.elu, noisy=self.use_noisy))
+                                             self.dropout, self.dropout, activation=F.elu, noisy=self.use_noisy))
 
         # Operation node embedding
         self.get_operations = nn.ModuleList()
         self.get_operations.append(MLPs([self.out_size_ma, self.in_size_ope, self.in_size_ope, self.in_size_ope],
-                                        self.hidden_size_ope, self.out_size_ope, self.num_heads[0], self.dropout, self.use_noisy))
-        for i in range(len(self.num_heads)-1):
+                                        self.hidden_size_ope, self.out_size_ope, self.num_heads[0], self.dropout,
+                                        self.use_noisy))
+        for i in range(len(self.num_heads) - 1):
             self.get_operations.append(MLPs([self.out_size_ma, self.out_size_ope, self.out_size_ope, self.out_size_ope],
-                                            self.hidden_size_ope, self.out_size_ope, self.num_heads[i], self.dropout, self.use_noisy))
+                                            self.hidden_size_ope, self.out_size_ope, self.num_heads[i], self.dropout,
+                                            self.use_noisy))
 
-        self.actor = MLPActor(self.n_hidden_actor, self.actor_dim, self.n_latent_actor, self.action_dim * self.atom_size, self.use_noisy).to(self.device)
+        self.actor = MLPActor(self.n_hidden_actor, self.actor_dim, self.n_latent_actor,
+                              self.action_dim * self.atom_size, self.use_noisy).to(self.device)
 
         if self.use_dueling:
-            self.value_stream = ValueStream(self.n_hidden_actor, self.actor_dim, self.n_latent_actor, 1 * self.atom_size, self.use_noisy)
+            self.value_stream = ValueStream(self.n_hidden_actor, self.actor_dim, self.n_latent_actor,
+                                            1 * self.atom_size, self.use_noisy)
 
         if self.use_iqn:
             self.cos_embedding = nn.Linear(extension_paras["iqn_quant_emb_dim"], self.actor_dim)
-            self.pis = torch.FloatTensor([np.pi * i for i in range(self.quant_emb_dim)]).view(1, 1, self.quant_emb_dim).to(
+            self.pis = torch.FloatTensor([np.pi * i for i in range(self.quant_emb_dim)]).view(1, 1,
+                                                                                              self.quant_emb_dim).to(
                 self.device)
 
     def forward(self):
@@ -171,6 +177,7 @@ class HGNNScheduler(nn.Module):
         raw_mas: shape: [len(batch_idxes), num_mas, in_size_ma]
         proc_time: shape: [len(batch_idxes), max(num_opes), num_mas]
     '''
+
     def get_normalized(self, raw_opes, raw_mas, proc_time, batch_idxes, nums_opes, flag_sample=False, flag_train=False):
         '''
         :param raw_opes: Raw feature vectors of operation nodes
@@ -182,11 +189,10 @@ class HGNNScheduler(nn.Module):
         :param flag_train: Flag for training
         :return: Normalized feats, including operations, machines and edges
         '''
-        batch_size = batch_idxes.size(0)  # number of uncompleted instances
 
         # There may be different operations for each instance, which cannot be normalized directly by the matrix
         if not flag_sample and not flag_train:
-            mean_opes = []
+            """mean_opes = []
             std_opes = []
             for i in range(batch_size):
                 mean_opes.append(torch.mean(raw_opes[i, :nums_opes[i], :], dim=-2, keepdim=True))
@@ -199,7 +205,33 @@ class HGNNScheduler(nn.Module):
             std_opes = torch.stack(std_opes, dim=0)
             mean_mas = torch.mean(raw_mas, dim=-2, keepdim=True)
             std_mas = torch.std(raw_mas, dim=-2, keepdim=True)
-            proc_time_norm = proc_time
+            proc_time_norm = proc_time"""
+            B, T, D = raw_opes.shape
+            mask = torch.arange(T, device=self.device)[None, :] < nums_opes[:, None]  # [B, T]
+
+            # Expand mask for broadcasting across features
+            mask_expanded = mask.unsqueeze(-1)  # [B, T, 1]
+
+            # Replace invalid positions with 0 for summation
+            masked_opes = raw_opes * mask_expanded
+
+            # Compute mean and std safely
+            valid_counts = nums_opes[:, None, None].clamp(min=1)  # avoid div by 0
+            mean_opes = masked_opes.sum(dim=1, keepdim=True) / valid_counts
+            # For std: use masked variance
+            diff = (masked_opes - mean_opes) * mask_expanded
+            var_opes = (diff ** 2).sum(dim=1, keepdim=True) / valid_counts
+            std_opes = var_opes.sqrt()
+
+            # mean/std for raw_mas (already consistent shape)
+            mean_mas = torch.mean(raw_mas, dim=-2, keepdim=True)
+            std_mas = torch.std(raw_mas, dim=-2, keepdim=True)
+
+            # Normalize proc_time where nonzero
+            nonzero_mask = proc_time != 0
+            proc_norm = self.feature_normalize(proc_time[nonzero_mask])
+            proc_time_norm = proc_time.clone()
+            proc_time_norm[nonzero_mask] = proc_norm
         # DRL-S and scheduling dgnn_layersuring training have a consistent number of operations
         else:
             mean_opes = torch.mean(raw_opes, dim=-2, keepdim=True)  # shape: [len(batch_idxes), 1, in_size_ope]
@@ -247,10 +279,13 @@ class HGNNScheduler(nn.Module):
         h_mas_pooled = h_mas.mean(dim=-2)  # shape: [len(batch_idxes), out_size_ma]
         # There may be different operations for each instance, which cannot be pooled directly by the matrix
         if not flag_sample and not flag_train:
-            h_opes_pooled = []
+            """h_opes_pooled = []
             for i in range(len(batch_idxes)):
                 h_opes_pooled.append(torch.mean(h_opes[i, :nums_opes[i], :], dim=-2))
-            h_opes_pooled = torch.stack(h_opes_pooled)  # shape: [len(batch_idxes), d]
+            h_opes_pooled = torch.stack(h_opes_pooled)  # shape: [len(batch_idxes), d]"""
+
+            mask = torch.arange(h_opes.size(1), device=h_opes.device)[None, :, None] < nums_opes[:, None, None]
+            h_opes_pooled = (h_opes * mask).sum(1) / mask.sum(1)
         else:
             h_opes_pooled = h_opes.mean(dim=-2)  # shape: [len(batch_idxes), out_size_ope]
 
@@ -262,7 +297,10 @@ class HGNNScheduler(nn.Module):
         # Matrix indicating whether processing is possible
         # shape: [len(batch_idxes), num_jobs, num_mas]
         eligible_proc = state.ope_ma_adj_batch[batch_idxes].gather(1,
-                          ope_step_batch[..., :, None].expand(-1, -1, state.ope_ma_adj_batch.size(-1))[batch_idxes])
+                                                                   ope_step_batch[..., :, None].expand(-1, -1,
+                                                                                                       state.ope_ma_adj_batch.size(
+                                                                                                           -1))[
+                                                                       batch_idxes])
         h_jobs_padding = h_jobs.unsqueeze(-2).expand(-1, -1, state.proc_times_batch.size(-1), -1)
         h_mas_padding = h_mas.unsqueeze(-3).expand_as(h_jobs_padding)
         h_mas_pooled_padding = h_mas_pooled[:, None, None, :].expand_as(h_jobs_padding)
@@ -373,20 +411,49 @@ class HGNNScheduler(nn.Module):
                     # action_probs = F.softmax(scores, dim=1)
 
         self.transition = ([
-            copy.deepcopy(state.ope_ma_adj_batch),
-            copy.deepcopy(state.ope_pre_adj_batch),
-            copy.deepcopy(state.ope_sub_adj_batch),
-            copy.deepcopy(norm_opes),
-            copy.deepcopy(norm_mas),
-            copy.deepcopy(norm_proc),
-            copy.deepcopy(jobs_gather)
-        ],)
+                               copy.deepcopy(state.ope_ma_adj_batch),
+                               copy.deepcopy(state.ope_pre_adj_batch),
+                               copy.deepcopy(state.ope_sub_adj_batch),
+                               copy.deepcopy(norm_opes),
+                               copy.deepcopy(norm_mas),
+                               copy.deepcopy(norm_proc),
+                               copy.deepcopy(jobs_gather)
+                           ],)
 
         return scores, ope_step_batch
 
+    def add_transition(self, state):
+        # Uncompleted instances
+        batch_idxes = torch.tensor([0])
+
+        # Raw feats
+        raw_opes = state.feat_opes_batch.transpose(1, 2)[batch_idxes]
+        raw_mas = state.feat_mas_batch.transpose(1, 2)[batch_idxes]
+        proc_time = state.proc_times_batch[batch_idxes]
+        # Normalize
+        nums_opes = state.nums_opes_batch[batch_idxes]
+        features = self.get_normalized(raw_opes, raw_mas, proc_time, batch_idxes, nums_opes, False, True)
+        norm_opes = (copy.deepcopy(features[0]))
+        norm_mas = (copy.deepcopy(features[1]))
+        norm_proc = (copy.deepcopy(features[2]))
+        ope_step_batch = torch.where(state.ope_step_batch > state.end_ope_biases_batch,
+                                     state.end_ope_biases_batch, state.ope_step_batch)
+        jobs_gather = ope_step_batch[..., :, None].expand(-1, -1, 8)[batch_idxes]
+
+        self.transition = ([copy.deepcopy(state.ope_ma_adj_batch),
+                           copy.deepcopy(state.ope_pre_adj_batch),
+                           copy.deepcopy(state.ope_sub_adj_batch),
+                           copy.deepcopy(norm_opes),
+                           copy.deepcopy(norm_mas),
+                           copy.deepcopy(norm_proc),
+                           copy.deepcopy(jobs_gather)
+                           ],)
+
+
     def act(self, state, memories, dones, epsilon, flag_sample=False, flag_train=True, num_quantiles=32):
         # Get probability of actions and the id of the current operation (be waiting to be processed) of each job
-        scores, ope_step_batch = self.get_action_prob(state, memories, flag_sample, flag_train=flag_train, num_quantiles=num_quantiles)
+        scores, ope_step_batch = self.get_action_prob(state, memories, flag_sample, flag_train=flag_train,
+                                                      num_quantiles=num_quantiles)
 
         if flag_train:
             if self.use_noisy:
@@ -439,20 +506,21 @@ class HGNNScheduler(nn.Module):
                                      state.end_ope_biases_batch, state.ope_step_batch)
 
         self.transition += ([
-            copy.deepcopy(state.ope_ma_adj_batch),
-            copy.deepcopy(state.ope_pre_adj_batch),
-            copy.deepcopy(state.ope_sub_adj_batch),
-            copy.deepcopy(norm_opes),
-            copy.deepcopy(norm_mas),
-            copy.deepcopy(norm_proc),
-            copy.deepcopy(ope_step_batch),
-            copy.deepcopy(state.mask_ma_procing_batch),
-            copy.deepcopy(state.mask_job_procing_batch),
-            copy.deepcopy(state.mask_job_finish_batch),
-        ],)
+                                copy.deepcopy(state.ope_ma_adj_batch),
+                                copy.deepcopy(state.ope_pre_adj_batch),
+                                copy.deepcopy(state.ope_sub_adj_batch),
+                                copy.deepcopy(norm_opes),
+                                copy.deepcopy(norm_mas),
+                                copy.deepcopy(norm_proc),
+                                copy.deepcopy(ope_step_batch),
+                                copy.deepcopy(state.mask_ma_procing_batch),
+                                copy.deepcopy(state.mask_job_procing_batch),
+                                copy.deepcopy(state.mask_job_finish_batch),
+                            ],)
+
 
 class Model:
-    def __init__(self, model_paras, train_paras, extension_paras, topk):
+    def __init__(self, model_paras, train_paras, extension_paras, topk=1):
         self.lr = train_paras["lr"]  # learning rate
         self.gamma = train_paras["gamma"]  # discount factor
         self.device = model_paras["device"]  # PyTorch device
@@ -547,44 +615,64 @@ class Model:
             loss = compute_c51_loss(self.v_max, self.v_min, self.atom_size, samples, self.online_network,
                                     self.target_network, self.batch_size, discount, self.device)
         else:
-            ope_ma_adj = torch.stack(samples["ope_ma_adj"], dim=0).transpose(0, 1).flatten(0, 1).to(torch.device("cuda:0"))
-            ope_pre_adj = torch.stack(samples["ope_pre_adj"], dim=0).transpose(0, 1).flatten(0, 1).to(torch.device("cuda:0"))
-            ope_sub_adj = torch.stack(samples["ope_sub_adj"], dim=0).transpose(0, 1).flatten(0, 1).to(torch.device("cuda:0"))
+            ope_ma_adj = torch.stack(samples["ope_ma_adj"], dim=0).transpose(0, 1).flatten(0, 1).to(
+                torch.device("cuda:0"))
+            ope_pre_adj = torch.stack(samples["ope_pre_adj"], dim=0).transpose(0, 1).flatten(0, 1).to(
+                torch.device("cuda:0"))
+            ope_sub_adj = torch.stack(samples["ope_sub_adj"], dim=0).transpose(0, 1).flatten(0, 1).to(
+                torch.device("cuda:0"))
             raw_opes = torch.stack(samples["raw_opes"], dim=0).transpose(0, 1).flatten(0, 1).to(torch.device("cuda:0"))
             raw_mas = torch.stack(samples["raw_mas"], dim=0).transpose(0, 1).flatten(0, 1).to(torch.device("cuda:0"))
-            proc_time = torch.stack(samples["proc_time"], dim=0).transpose(0, 1).flatten(0, 1).to(torch.device("cuda:0"))
-            jobs_gather = torch.stack(samples["jobs_gather"], dim=0).transpose(0, 1).flatten(0, 1).to(torch.device("cuda:0"))
+            proc_time = torch.stack(samples["proc_time"], dim=0).transpose(0, 1).flatten(0, 1).to(
+                torch.device("cuda:0"))
+            jobs_gather = torch.stack(samples["jobs_gather"], dim=0).transpose(0, 1).flatten(0, 1).to(
+                torch.device("cuda:0"))
 
             rewards = torch.stack(samples["rewards"], dim=0).to(torch.device("cuda:0"))
             dones = torch.stack(samples["dones"], dim=0).to(torch.device("cuda:0"))
             actions = torch.stack(samples["actions"], dim=0).transpose(0, 1).flatten(0, 1).to(torch.device("cuda:0"))
 
-            next_ope_ma_adj = torch.stack(samples["next_ope_ma_adj"], dim=0).transpose(0, 1).flatten(0, 1).to(torch.device("cuda:0"))
-            next_ope_pre_adj = torch.stack(samples["next_ope_pre_adj"], dim=0).transpose(0, 1).flatten(0, 1).to(torch.device("cuda:0"))
-            next_ope_sub_adj = torch.stack(samples["next_ope_sub_adj"], dim=0).transpose(0, 1).flatten(0, 1).to(torch.device("cuda:0"))
-            next_raw_opes = torch.stack(samples["next_raw_opes"], dim=0).transpose(0, 1).flatten(0, 1).to(torch.device("cuda:0"))
-            next_raw_mas = torch.stack(samples["next_raw_mas"], dim=0).transpose(0, 1).flatten(0, 1).to(torch.device("cuda:0"))
-            next_proc_time = torch.stack(samples["next_proc_time"], dim=0).transpose(0, 1).flatten(0, 1).to(torch.device("cuda:0"))
-            next_ope_step_batch = torch.stack(samples["next_ope_step_batch"], dim=0).transpose(0, 1).flatten(0, 1).to(torch.device("cuda:0"))
-            next_mask_mas = torch.stack(samples["next_mask_mas"], dim=0).transpose(0, 1).flatten(0, 1).to(torch.device("cuda:0"))
-            next_mask_job_procing = torch.stack(samples["next_mask_job_procing"], dim=0).transpose(0, 1).flatten(0, 1).to(torch.device("cuda:0"))
-            next_mask_job_finish = torch.stack(samples["next_mask_job_finish"], dim=0).transpose(0, 1).flatten(0, 1).to(torch.device("cuda:0"))
+            next_ope_ma_adj = torch.stack(samples["next_ope_ma_adj"], dim=0).transpose(0, 1).flatten(0, 1).to(
+                torch.device("cuda:0"))
+            next_ope_pre_adj = torch.stack(samples["next_ope_pre_adj"], dim=0).transpose(0, 1).flatten(0, 1).to(
+                torch.device("cuda:0"))
+            next_ope_sub_adj = torch.stack(samples["next_ope_sub_adj"], dim=0).transpose(0, 1).flatten(0, 1).to(
+                torch.device("cuda:0"))
+            next_raw_opes = torch.stack(samples["next_raw_opes"], dim=0).transpose(0, 1).flatten(0, 1).to(
+                torch.device("cuda:0"))
+            next_raw_mas = torch.stack(samples["next_raw_mas"], dim=0).transpose(0, 1).flatten(0, 1).to(
+                torch.device("cuda:0"))
+            next_proc_time = torch.stack(samples["next_proc_time"], dim=0).transpose(0, 1).flatten(0, 1).to(
+                torch.device("cuda:0"))
+            next_ope_step_batch = torch.stack(samples["next_ope_step_batch"], dim=0).transpose(0, 1).flatten(0, 1).to(
+                torch.device("cuda:0"))
+            next_mask_mas = torch.stack(samples["next_mask_mas"], dim=0).transpose(0, 1).flatten(0, 1).to(
+                torch.device("cuda:0"))
+            next_mask_job_procing = torch.stack(samples["next_mask_job_procing"], dim=0).transpose(0, 1).flatten(0,
+                                                                                                                 1).to(
+                torch.device("cuda:0"))
+            next_mask_job_finish = torch.stack(samples["next_mask_job_finish"], dim=0).transpose(0, 1).flatten(0, 1).to(
+                torch.device("cuda:0"))
 
             curr_q_value = self.compute_curr_q_value(ope_ma_adj, raw_opes, raw_mas, proc_time, ope_pre_adj, ope_sub_adj,
                                                      jobs_gather, self.online_network)
             curr_q_value = curr_q_value.gather(1, actions.unsqueeze(1))
 
             if self.use_munch:
-                next_q_values = self.compute_next_q_value(next_ope_ma_adj, next_ope_pre_adj, next_ope_sub_adj, next_raw_opes,
-                                                     next_raw_mas, next_proc_time, next_ope_step_batch, next_mask_mas,
-                                                     next_mask_job_procing, next_mask_job_finish)
+                next_q_values = self.compute_next_q_value(next_ope_ma_adj, next_ope_pre_adj, next_ope_sub_adj,
+                                                          next_raw_opes,
+                                                          next_raw_mas, next_proc_time, next_ope_step_batch,
+                                                          next_mask_mas,
+                                                          next_mask_job_procing, next_mask_job_finish)
 
                 y = next_q_values - next_q_values.max(dim=1, keepdim=True)[0]
-                current_q_values = self.compute_curr_q_value(ope_ma_adj, raw_opes, raw_mas, proc_time, ope_pre_adj, ope_sub_adj,
-                                                     jobs_gather, self.target_network)
+                current_q_values = self.compute_curr_q_value(ope_ma_adj, raw_opes, raw_mas, proc_time, ope_pre_adj,
+                                                             ope_sub_adj,
+                                                             jobs_gather, self.target_network)
                 y_curr = current_q_values - current_q_values.max(dim=1, keepdim=True)[0]
 
-                tau_log_pi_next = next_q_values - next_q_values.max(dim=1, keepdim=True)[0] + self.munch_tau * torch.log(
+                tau_log_pi_next = next_q_values - next_q_values.max(dim=1, keepdim=True)[
+                    0] + self.munch_tau * torch.log(
                     torch.sum(torch.exp(y / self.munch_tau), dim=1, keepdim=True))
                 replay_log_policy = current_q_values - current_q_values.max(dim=1, keepdim=True)[
                     0] + self.munch_tau * torch.log(torch.sum(torch.exp(y_curr / self.munch_tau), dim=1, keepdim=True))
@@ -602,8 +690,10 @@ class Model:
 
                 target = (rewards + munchausen_term + mask.view(-1, 1) * discount * replay_next_qt_softmax)
             else:
-                next_q_value = self.compute_next_q_value(next_ope_ma_adj, next_ope_pre_adj, next_ope_sub_adj, next_raw_opes,
-                                                         next_raw_mas, next_proc_time, next_ope_step_batch, next_mask_mas,
+                next_q_value = self.compute_next_q_value(next_ope_ma_adj, next_ope_pre_adj, next_ope_sub_adj,
+                                                         next_raw_opes,
+                                                         next_raw_mas, next_proc_time, next_ope_step_batch,
+                                                         next_mask_mas,
                                                          next_mask_job_procing, next_mask_job_finish)
 
                 mask = ~dones
@@ -616,8 +706,9 @@ class Model:
 
         return loss
 
-    def compute_next_scores(self, next_ope_ma_adj, next_ope_pre_adj, next_ope_sub_adj, next_raw_opes, next_raw_mas, next_proc_time, next_ope_step_batch, next_mask_mas,
-                                                 next_mask_job_procing, next_mask_job_finish, target=True):
+    def compute_next_scores(self, next_ope_ma_adj, next_ope_pre_adj, next_ope_sub_adj, next_raw_opes, next_raw_mas,
+                            next_proc_time, next_ope_step_batch, next_mask_mas,
+                            next_mask_job_procing, next_mask_job_finish, target=True):
         model = self.target_network if target else self.online_network
 
         batch_idxes = torch.arange(0, next_ope_ma_adj.size(-3)).long()
@@ -642,8 +733,9 @@ class Model:
         # Matrix indicating whether processing is possible
         # shape: [len(batch_idxes), num_jobs, num_mas]
         eligible_proc = next_ope_ma_adj[batch_idxes].gather(1, next_ope_step_batch[..., :, None].expand(-1, -1,
-                                                                                                       next_ope_ma_adj.size(
-                                                                                                           -1))[batch_idxes])
+                                                                                                        next_ope_ma_adj.size(
+                                                                                                            -1))[
+            batch_idxes])
         h_jobs_padding = h_jobs.unsqueeze(-2).expand(-1, -1, next_proc_time.size(-1), -1)
         h_mas_padding = h_mas.unsqueeze(-3).expand_as(h_jobs_padding)
         h_mas_pooled_padding = h_mas_pooled[:, None, None, :].expand_as(h_jobs_padding)
@@ -680,8 +772,9 @@ class Model:
 
         return scores
 
-    def compute_next_q_value(self, next_ope_ma_adj, next_ope_pre_adj, next_ope_sub_adj, next_raw_opes, next_raw_mas, next_proc_time, next_ope_step_batch, next_mask_mas,
-                                                 next_mask_job_procing, next_mask_job_finish):
+    def compute_next_q_value(self, next_ope_ma_adj, next_ope_pre_adj, next_ope_sub_adj, next_raw_opes, next_raw_mas,
+                             next_proc_time, next_ope_step_batch, next_mask_mas,
+                             next_mask_job_procing, next_mask_job_finish):
 
         scores = self.compute_next_scores(next_ope_ma_adj, next_ope_pre_adj, next_ope_sub_adj, next_raw_opes,
                                           next_raw_mas, next_proc_time, next_ope_step_batch, next_mask_mas,
@@ -693,15 +786,18 @@ class Model:
             if not self.use_ddqn:
                 next_q_value = scores.max(dim=1, keepdim=True)[0].detach()
             else:
-                online_scores = self.compute_next_scores(next_ope_ma_adj, next_ope_pre_adj, next_ope_sub_adj, next_raw_opes,
-                                              next_raw_mas, next_proc_time, next_ope_step_batch, next_mask_mas,
-                                              next_mask_job_procing, next_mask_job_finish, target=False)
+                online_scores = self.compute_next_scores(next_ope_ma_adj, next_ope_pre_adj, next_ope_sub_adj,
+                                                         next_raw_opes,
+                                                         next_raw_mas, next_proc_time, next_ope_step_batch,
+                                                         next_mask_mas,
+                                                         next_mask_job_procing, next_mask_job_finish, target=False)
 
                 next_q_value = scores.gather(1, online_scores.argmax(dim=1, keepdim=True)).detach()
 
         return next_q_value
 
-    def compute_curr_q_value(self, ope_ma_adj, raw_opes, raw_mas, proc_time, ope_pre_adj, ope_sub_adj, jobs_gather, model):
+    def compute_curr_q_value(self, ope_ma_adj, raw_opes, raw_mas, proc_time, ope_pre_adj, ope_sub_adj, jobs_gather,
+                             model):
         batch_idxes = torch.arange(0, ope_ma_adj.size(-3)).long()
 
         features = (raw_opes, raw_mas, proc_time)

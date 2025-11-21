@@ -213,10 +213,9 @@ class MLPsim(nn.Module):
     def forward(self, feat, adj):
         # MLP_{\theta_x}, where x = 1, 2, 3, 4
         # Note that message-passing should along the edge (according to the adjacency matrix)
-        a = adj.unsqueeze(-1) * feat.unsqueeze(-3)
-        b = torch.sum(a, dim=-2)
-        c = self.project(b)
-        return c
+        a = torch.matmul(adj.float(), feat)  # (batch, N, feat_dim)
+        b = self.project(a)
+        return b
 
     def reset_noise(self):
         for layer in self.project:

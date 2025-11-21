@@ -219,8 +219,8 @@ def main(env_paras, model_paras, train_paras):
 
 if __name__ == '__main__':
     config_name = "PPO"
-    # instance_sizes = [(6, 6), (10, 5), (20, 5), (15, 10), (20, 10)]
-    instance_sizes = [(6, 6)]
+    instance_sizes = [(6, 6), (10, 5), (20, 5), (15, 10), (20, 10)]
+    # instance_sizes = [(6, 6)]
 
     problem_types = ["FJSP"]
 
@@ -235,5 +235,8 @@ if __name__ == '__main__':
             env_paras["is_fjsp"] = True if problem == "FJSP" else False
             env_paras["num_jobs"] = size[0]
             env_paras["num_mas"] = size[1]
+
+            if size[0] == 15 or (size[0] == 20 and size[1] == 10):
+                train_paras["max_iterations"] = 5000
 
             main(env_paras, model_paras, train_paras)

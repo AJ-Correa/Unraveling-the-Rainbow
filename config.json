@@ -38,16 +38,16 @@
     "buffer_size": 20000,
     "switch_instance": 1,
     "seed": 14,
-    "config_name": "Rainbow_noDueling_noDistributional",
-    "save_output": false
+    "config_name": "DQN_16batch",
+    "save_output": true
   },
   "extensions_paras": {
-    "use_ddqn": true,
-    "use_per": true,
+    "use_ddqn": false,
+    "use_per": false,
     "use_dueling": false,
-    "use_noisy": true,
+    "use_noisy": false,
     "use_distributional": false,
-    "use_n_step": true,
+    "use_n_step": false,
     "use_iqn": false,
     "use_munchausen": false,
     "per_alpha": 0.4,
@@ -132,12 +132,14 @@
   },
   "test_paras": {
     "sample": false,
+    "pomo_starting_nodes": false,
     "topk": 5,
     "is_ppo": false,
     "is_a2c": false,
     "is_reinforce": false,
     "is_vmpo": false,
-    "num_sample": 100,
+    "is_sql": false,
+    "num_sample": 25,
     "saved_model_num_jobs": 6,
     "saved_model_num_mas": 6,
     "benchmark_path": "data_test/FJSP/Public/Brandimarte/"

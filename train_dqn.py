@@ -291,41 +291,40 @@ def main(env_paras, model_paras, train_paras, extension_paras):
 
 if __name__ == '__main__':
 
-    config_names = ["DQN", "DDQN", "PER", "Dueling", "Noisy", "Distributional", "NStep", "Rainbow"]
-    config_uses = [[False, False, False, False, False, False],
-                   [True, False, False, False, False, False],
-                   [False, True, False, False, False, False],
-                   [False, False, True, False, False, False],
-                   [False, False, False, True, False, False],
-                   [False, False, False, False, True, False],
-                   [False, False, False, False, False, True],
-                   [True, True, True, True, True, True]]
-    
-    for config in range(4, 8):
-        # Load config and init objects
-        with open("./config.json", 'r') as load_f:
-            load_dict = json.load(load_f)
-        env_paras = copy.deepcopy(load_dict["env_paras"])
-        model_paras = copy.deepcopy(load_dict["model_paras"])
-        train_paras = copy.deepcopy(load_dict["dqn_paras"])
-        extension_paras = copy.deepcopy(load_dict["extensions_paras"])
-    
-        train_paras["config_name"] = config_names[config]
-        extension_paras["use_ddqn"] = config_uses[config][0]
-        extension_paras["use_per"] = config_uses[config][1]
-        extension_paras["use_dueling"] = config_uses[config][2]
-        extension_paras["use_noisy"] = config_uses[config][3]
-        extension_paras["use_distributional"] = config_uses[config][4]
-        extension_paras["use_n_step"] = config_uses[config][5]
-    
-        main(env_paras, model_paras, train_paras, extension_paras)
+    # config_names = ["DQN", "DDQN", "PER", "Dueling", "Noisy", "Distributional", "NStep", "Rainbow"]
+    # config_uses = [[False, False, False, False, False, False],
+    #                [True, False, False, False, False, False],
+    #                [False, True, False, False, False, False],
+    #                [False, False, True, False, False, False],
+    #                [False, False, False, True, False, False],
+    #                [False, False, False, False, True, False],
+    #                [False, False, False, False, False, True],
+    #                [True, True, True, True, True, True]]
+    #
+    # for config in range(8):
+    #     # Load config and init objects
+    #     with open("./config.json", 'r') as load_f:
+    #         load_dict = json.load(load_f)
+    #     env_paras = copy.deepcopy(load_dict["env_paras"])
+    #     model_paras = copy.deepcopy(load_dict["model_paras"])
+    #     train_paras = copy.deepcopy(load_dict["dqn_paras"])
+    #     extension_paras = copy.deepcopy(load_dict["extensions_paras"])
+    #
+    #     train_paras["config_name"] = config_names[config]
+    #     extension_paras["use_ddqn"] = config_uses[config][0]
+    #     extension_paras["use_per"] = config_uses[config][1]
+    #     extension_paras["use_dueling"] = config_uses[config][2]
+    #     extension_paras["use_noisy"] = config_uses[config][3]
+    #     extension_paras["use_distributional"] = config_uses[config][4]
+    #     extension_paras["use_n_step"] = config_uses[config][5]
+    #
+    #     main(env_paras, model_paras, train_paras, extension_paras)
 
-    """with open("./config.json", 'r') as load_f:
+    with open("./config.json", 'r') as load_f:
         load_dict = json.load(load_f)
     env_paras = copy.deepcopy(load_dict["env_paras"])
     model_paras = copy.deepcopy(load_dict["model_paras"])
-    train_paras = copy.deepcopy(load_dict["train_paras"])
+    train_paras = copy.deepcopy(load_dict["dqn_paras"])
     extension_paras = copy.deepcopy(load_dict["extensions_paras"])
 
-    main(env_paras, model_paras, train_paras, extension_paras)"""
-
+    main(env_paras, model_paras, train_paras, extension_paras)

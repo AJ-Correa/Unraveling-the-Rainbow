@@ -12,6 +12,8 @@ import numpy as np
 from models import dqn_model, PPO_model, A2C_model, REINFORCE_model, VMPO_model
 from env.load_data import nums_detec
 
+from utils.my_utils import pomo_starting_nodes
+
 
 def setup_seed(seed):
     torch.manual_seed(seed)
@@ -117,27 +119,39 @@ def main(env_paras, model_paras, train_paras, extension_paras, test_paras, confi
 
     if not test_paras["sample"]:
         for instance in test_files:
-            env = gym.make('fjsp-v0', case=[instance], env_paras=env_test_paras, data_source='file',
-                           is_public_jssp=is_public_jssp)
-            env.reset()
+            if test_paras["pomo_starting_nodes"]:
+                initial_actions, env = pomo_starting_nodes(instance, copy.deepcopy(env_test_paras), is_public_jssp)
+                env.reset()
+                first_timestep = True
+            else:
+                env = gym.make('fjsp-v0', case=instance, env_paras=env_test_paras, data_source='public',
+                               is_public_jssp=is_public_jssp)
+                env.reset()
+
             state = env.state
             done = False
             dones = env.done_batch
             while ~done:
                 with torch.no_grad():
-                    if test_paras["is_ppo"]:
-                        actions = model.policy_old.act(state, None, dones, epsilon=0, flag_sample=False,
-                                                       flag_train=False)
-                    elif test_paras["is_a2c"]:
-                        actions = model.policy.act(state, None, dones, epsilon=0, flag_sample=False, flag_train=False)
-                    elif test_paras["is_reinforce"]:
-                        actions = model.policy.act(state, None, dones, epsilon=0, flag_sample=False, flag_train=False)
-                    elif test_paras["is_vmpo"]:
-                        actions = model.policy_old.act(state, None, dones, epsilon=0, flag_sample=False,
-                                                       flag_train=False)
+                    if test_paras["pomo_starting_nodes"] and first_timestep:
+                        first_timestep = False
+                        actions = initial_actions
                     else:
-                        actions = model.online_network.act(state, None, dones, epsilon=0, flag_sample=False,
+                        if test_paras["is_ppo"]:
+                            actions = model.policy_old.act(state, None, dones, epsilon=0, flag_sample=False,
                                                            flag_train=False)
+                        elif test_paras["is_a2c"]:
+                            actions = model.policy.act(state, None, dones, epsilon=0, flag_sample=False,
+                                                       flag_train=False)
+                        elif test_paras["is_reinforce"]:
+                            actions = model.policy.act(state, None, dones, epsilon=0, flag_sample=False,
+                                                       flag_train=False)
+                        elif test_paras["is_vmpo"]:
+                            actions = model.policy_old.act(state, None, dones, epsilon=0, flag_sample=False,
+                                                           flag_train=False)
+                        else:
+                            actions = model.online_network.act(state, None, dones, epsilon=0, flag_sample=False,
+                                                               flag_train=False)
                 state, rewards, dones, _ = env.step(actions)
                 done = dones.all()
 
@@ -145,7 +159,7 @@ def main(env_paras, model_paras, train_paras, extension_paras, test_paras, confi
             # if not gantt_result:
             #    print("Scheduling Error！！！！！！")
 
-            makespan = copy.deepcopy(env.makespan_batch.mean()).cpu().item()
+            makespan = copy.deepcopy(env.makespan_batch.min()).cpu().item()
             total_makespan += makespan
             if results != None:
                 results[result_column_name].append(makespan)
@@ -155,30 +169,40 @@ def main(env_paras, model_paras, train_paras, extension_paras, test_paras, confi
         print('\n', 'average makespan: ', round(total_makespan / len(test_files), 2))
     else:
         for instance in test_files:
-            S = test_paras["num_sample"]
-            repeated_instance = [instance for _ in range(S)]
-            env_test_paras["batch_size"] = 1 * S
-            env = gym.make('fjsp-v0', case=repeated_instance, env_paras=env_test_paras, data_source='file',
-                           is_public_jssp=is_public_jssp)
-            env.reset()
+            if test_paras["pomo_starting_nodes"]:
+                initial_actions, env = pomo_starting_nodes(instance, copy.deepcopy(env_test_paras), is_public_jssp,
+                                                           samples=test_paras["num_sample"])
+                env.reset()
+                first_timestep = True
+            else:
+                S = test_paras["num_sample"]
+                env_test_paras["batch_size"] = 1 * S
+                env = gym.make('fjsp-v0', case=instance, env_paras=env_test_paras, data_source='public',
+                               is_public_jssp=is_public_jssp)
+                env.reset()
+
             state = env.state
             done = False
             dones = env.done_batch
             while ~done:
                 with torch.no_grad():
-                    if test_paras["is_ppo"]:
-                        actions = model.policy_old.act(state, None, dones, epsilon=0, flag_sample=True,
-                                                       flag_train=False)
-                    elif test_paras["is_a2c"]:
-                        actions = model.policy.act(state, None, dones, epsilon=0, flag_sample=True, flag_train=False)
-                    elif test_paras["is_reinforce"]:
-                        actions = model.policy.act(state, None, dones, epsilon=0, flag_sample=True, flag_train=False)
-                    elif test_paras["is_vmpo"]:
-                        actions = model.policy_old.act(state, None, dones, epsilon=0, flag_sample=True,
-                                                       flag_train=False)
+                    if test_paras["pomo_starting_nodes"] and first_timestep:
+                        first_timestep = False
+                        actions = initial_actions
                     else:
-                        actions = model.online_network.act(state, None, dones, epsilon=0, flag_sample=True,
+                        if test_paras["is_ppo"]:
+                            actions = model.policy_old.act(state, None, dones, epsilon=0, flag_sample=True,
                                                            flag_train=False)
+                        elif test_paras["is_a2c"]:
+                            actions = model.policy.act(state, None, dones, epsilon=0, flag_sample=True, flag_train=False)
+                        elif test_paras["is_reinforce"]:
+                            actions = model.policy.act(state, None, dones, epsilon=0, flag_sample=True, flag_train=False)
+                        elif test_paras["is_vmpo"]:
+                            actions = model.policy_old.act(state, None, dones, epsilon=0, flag_sample=True,
+                                                           flag_train=False)
+                        else:
+                            actions = model.online_network.act(state, None, dones, epsilon=0, flag_sample=True,
+                                                               flag_train=False)
                 state, rewards, dones, _ = env.step(actions)
                 done = dones.all()
 
@@ -198,11 +222,11 @@ def main(env_paras, model_paras, train_paras, extension_paras, test_paras, confi
 
 
 if __name__ == '__main__':
-    instance_sizes = [(10, 5)]
+    instance_sizes = [(6, 6)]
     results = {}
 
     for size in instance_sizes:
-
+        # config_names = ["DQN", "PPO", "A2C", "REINFORCE", "VMPO"]
         config_names = ["DQN", "DDQN", "PER", "Dueling", "Noisy", "Distributional", "NStep", "Rainbow", "PPO", "A2C",
                         "REINFORCE", "VMPO"]
         config_uses = [[False, False, False, False, False, False],
@@ -214,7 +238,7 @@ if __name__ == '__main__':
                        [False, False, False, False, False, True],
                        [True, True, True, True, True, True]]
 
-        for config in range(12):
+        for config in range(12, 13):
             print("#####################################################################################")
             print(f"Running {config_names[config]} model - Instance size: {size[0]}x{size[1]}")
 
@@ -256,5 +280,5 @@ if __name__ == '__main__':
     df = pd.DataFrame(dict([(key, pd.Series(value)) for key, value in results.items()]))
 
     # Save results to an Excel file
-    output_file = "results/sampling/results_brandimarte.xlsx"
-    df.to_excel(output_file, index=False)
+    output_file = f"results/greedy/results_fattahi.xlsx"
+    # df.to_excel(output_file, index=False)

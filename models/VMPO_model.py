@@ -183,7 +183,7 @@ class HGNNScheduler(nn.Module):
 
         # There may be different operations for each instance, which cannot be normalized directly by the matrix
         if not flag_sample and not flag_train:
-            mean_opes = []
+            """mean_opes = []
             std_opes = []
             for i in range(batch_size):
                 mean_opes.append(torch.mean(raw_opes[i, :nums_opes[i], :], dim=-2, keepdim=True))
@@ -196,7 +196,34 @@ class HGNNScheduler(nn.Module):
             std_opes = torch.stack(std_opes, dim=0)
             mean_mas = torch.mean(raw_mas, dim=-2, keepdim=True)
             std_mas = torch.std(raw_mas, dim=-2, keepdim=True)
-            proc_time_norm = proc_time
+            proc_time_norm = proc_time"""
+            device = raw_opes.device
+            B, T, D = raw_opes.shape
+            mask = torch.arange(T, device=device)[None, :] < nums_opes[:, None]  # [B, T]
+
+            # Expand mask for broadcasting across features
+            mask_expanded = mask.unsqueeze(-1)  # [B, T, 1]
+
+            # Replace invalid positions with 0 for summation
+            masked_opes = raw_opes * mask_expanded
+
+            # Compute mean and std safely
+            valid_counts = nums_opes[:, None, None].clamp(min=1)  # avoid div by 0
+            mean_opes = masked_opes.sum(dim=1, keepdim=True) / valid_counts
+            # For std: use masked variance
+            diff = (masked_opes - mean_opes) * mask_expanded
+            var_opes = (diff ** 2).sum(dim=1, keepdim=True) / valid_counts
+            std_opes = var_opes.sqrt()
+
+            # mean/std for raw_mas (already consistent shape)
+            mean_mas = torch.mean(raw_mas, dim=-2, keepdim=True)
+            std_mas = torch.std(raw_mas, dim=-2, keepdim=True)
+
+            # Normalize proc_time where nonzero
+            nonzero_mask = proc_time != 0
+            proc_norm = self.feature_normalize(proc_time[nonzero_mask])
+            proc_time_norm = proc_time.clone()
+            proc_time_norm[nonzero_mask] = proc_norm
         # DRL-S and scheduling during training have a consistent number of operations
         else:
             mean_opes = torch.mean(raw_opes, dim=-2, keepdim=True)  # shape: [len(batch_idxes), 1, in_size_ope]

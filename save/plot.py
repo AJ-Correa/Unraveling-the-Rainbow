@@ -339,7 +339,7 @@ def plot_policy_vs_value_average(folders, problem_type, num_jobs, num_machines):
 
 def plot_training_times():
     df = pd.DataFrame({
-        'Algorithm': ['DQN', 'DDQN', 'PER', 'Dueling', 'NStep', 'Noisy', 'Distributional', 'Rainbow', 'PPO', 'A2C', 'REINFORCE', 'V-MPO'],
+        'Algorithm': ['DQN', 'DDQN', 'PER', 'Dueling', 'Multi-step', 'Noisy', 'Distributional', 'Rainbow', 'PPO', 'A2C', 'REINFORCE', 'V-MPO'],
         'Training time (m)': [165.6, 197.9, 176.2, 174.1, 272.6, 190.7, 194.8, 390.2, 220.0, 188.5, 186.3, 192.8]
     })
 
@@ -372,7 +372,7 @@ def plot_training_times():
         # Training time (centered above bar)
         ax.text(
             width - 5, y_center,
-            f"{row['Training time (m)']:.1f}m",
+            f"{row['Training time (m)']:.1f}",
             ha='right', va='center',
             fontsize=11, color='white', weight='bold'
         )
@@ -386,7 +386,7 @@ def plot_training_times():
         )
 
     ax.axvline(baseline, ls='--', color='gray', linewidth=1.5)
-    ax.text(baseline - 18, -0.6, f"Average: {baseline:.1f}m", color='black', fontsize=11)
+    ax.text(baseline - 18, -0.6, f"Average: {baseline:.1f}", color='black', fontsize=11)
 
     # ax.set_title("Average Training Time per Algorithm", fontsize=16, weight='bold')
     ax.set_xlabel("Training Time (minutes)", fontsize=13)
@@ -395,7 +395,7 @@ def plot_training_times():
     ax.tick_params(axis='x', labelsize=11)
     plt.tight_layout()
     # plt.show()
-    plt.savefig(f'Plots/v2 plots/Figure 4/Figure 4.png', dpi=300, bbox_inches='tight')
+    plt.savefig(f'Plots/v2 plots/Figure_training_times.png', dpi=300, bbox_inches='tight')
 
 def compute_pvalue_matrix(df, problem_type, test_func=wilcoxon):
     sub_df = df[df['Problem type'] == problem_type]
@@ -543,8 +543,8 @@ folders = glob.glob(f'{problem_type}/{num_jobs}{f"0{num_machines}" if num_machin
 # plot_individual_value_and_avg_policy(folders, problem_type, num_jobs, num_machines)
 # plot_individual_policy_and_avg_value(folders, problem_type, num_jobs, num_machines)
 # plot_policy_vs_value_average(folders, problem_type, num_jobs, num_machines)
-# plot_training_times()
-plot_heatmap("../results/testing_results.xlsx")
+plot_training_times()
+# plot_heatmap("../results/testing_results.xlsx")
 
 
 
