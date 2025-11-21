@@ -241,14 +241,14 @@ def main(env_paras, model_paras, train_paras, extension_paras, test_paras, confi
 
 if __name__ == '__main__':
 
-    # instance_sizes = [(6, 6), (10, 5), (20, 5), (15, 10), (20, 10), (30, 10), (40, 10)]
-    instance_sizes = [(50, 20), (100, 20)]
-    problem_types = ["FJSP"]
+    instance_sizes = [(6, 6), (10, 5), (20, 5), (15, 10), (20, 10), (30, 10), (40, 10)]
+    problem_types = ["FJSP", "JSSP"]
     writer = pd.ExcelWriter("testing_results.xlsx", engine="openpyxl")
 
-    for problem in problem_types:
-        for size in instance_sizes:
-            size_results = []
+    for size in instance_sizes:
+        size_results = []
+
+        for problem in problem_types:
             config_names = ["DQN", "DDQN", "PER", "Dueling", "Noisy", "Distributional", "NStep", "Rainbow", "PPO",
                             "A2C", "REINFORCE", "VMPO"]
             config_uses = [[False, False, False, False, False, False],
@@ -275,9 +275,6 @@ if __name__ == '__main__':
                 if size[0] == 30 or size[0] == 40:
                     test_paras["saved_model_num_jobs"] = 20
                     test_paras["saved_model_num_mas"] = 10
-                elif size[0] == 50 or size[0] == 100:
-                    test_paras["saved_model_num_jobs"] = 6
-                    test_paras["saved_model_num_mas"] = 6
                 else:
                     test_paras["saved_model_num_jobs"] = size[0]
                     test_paras["saved_model_num_mas"] = size[1]
@@ -308,7 +305,6 @@ if __name__ == '__main__':
 
                 train_paras["config_name"] = config_names[config]
                 makespans = main(env_paras, model_paras, train_paras, extension_paras, test_paras, config_names[config])
-
                 for idx, obj in enumerate(makespans):
                     size_results.append({
                         "Algorithm": config_names[config],
@@ -319,7 +315,7 @@ if __name__ == '__main__':
 
         df = pd.DataFrame(size_results)
         sheet_name = f"{size[0]}x{size[1]}"
-        # df.to_excel(writer, sheet_name=sheet_name, index=False)
+        df.to_excel(writer, sheet_name=sheet_name, index=False)
 
     writer.close()
-    # print("✅ Results saved to 'testing_results.xlsx'")
+    print("✅ Results saved to 'testing_results.xlsx'")

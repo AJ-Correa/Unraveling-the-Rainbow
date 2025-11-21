@@ -226,7 +226,6 @@ if __name__ == '__main__':
     results = {}
 
     for size in instance_sizes:
-        # config_names = ["DQN", "PPO", "A2C", "REINFORCE", "VMPO"]
         config_names = ["DQN", "DDQN", "PER", "Dueling", "Noisy", "Distributional", "NStep", "Rainbow", "PPO", "A2C",
                         "REINFORCE", "VMPO"]
         config_uses = [[False, False, False, False, False, False],
@@ -280,5 +279,5 @@ if __name__ == '__main__':
     df = pd.DataFrame(dict([(key, pd.Series(value)) for key, value in results.items()]))
 
     # Save results to an Excel file
-    output_file = f"results/greedy/results_fattahi.xlsx"
-    # df.to_excel(output_file, index=False)
+    output_file = f"results/greedy/results_brandimarte.xlsx"
+    df.to_excel(output_file, index=False)
