@@ -237,7 +237,7 @@ if __name__ == '__main__':
                        [False, False, False, False, False, True],
                        [True, True, True, True, True, True]]
 
-        for config in range(12, 13):
+        for config in range(12):
             print("#####################################################################################")
             print(f"Running {config_names[config]} model - Instance size: {size[0]}x{size[1]}")
 

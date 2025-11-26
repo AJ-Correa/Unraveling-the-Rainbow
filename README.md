@@ -1,63 +1,161 @@
-# Unraveling the Rainbow
+# 🌈 Unraveling the Rainbow
 
 [![arXiv](https://img.shields.io/badge/arXiv-2505.03323-b31b1b.svg)](https://arxiv.org/abs/2505.03323)
 
-Implementation of the paper **Unraveling the Rainbow: can value-based methods schedule?**
+This is the repository of the paper **_Unraveling the Rainbow: can value-based methods schedule?_**
 
-### Dependencies
+---
 
-* python $\ge$ 3.11.11
-* pytorch $\ge$ 2.4.0
-* gym $\ge$ 0.22.0
-* numpy $\ge$ 2.0.2
-* pandas $\ge$ 2.2.3
+## 📦 Dependencies
 
-### Introduction
+Make sure you have the following installed:
 
-* ```/data_dev``` and ```/data_test``` are the directories storing the validation and testing instances for both the job-shop (JSSP) and flexible job-shop scheduling (FJSP) problems, of all different sizes considered in our work.
-* ```/env``` contains the implementation of the problem environment.
-* ```/models``` contains the implementation of the models for the value-based algorithms and PPO.
-* ```/network``` contains utilities code for the heterogeneous GNN model, multi-layer perceptron and noisy linear layers.
-* ```/results``` contains the results on each individual benchmark instance used in our paper.
-* ```/save``` is the directory used to store all different models trained.
-* ```/utils``` contains different utilities used during training and testing.
-* ```config.json``` is the configuration file, which has all different parameters that must be adjusted for different scenarios.
-* ```PPO_model.py``` contains the implementation of the algorithms in this article, including HGNN and PPO algorithms
-* ```test.py``` for testing
-* ```train_dqn.py``` is the training file for value-based algorithms.
-* ```train_ppo.py``` is the training file for the PPO algorithm.
-* ```validate.py``` is the file used for performing the validation steps.
-* ```test.py``` is the testing file for randomly generated instances.
-* ```test_benchmark.py``` is the testing file for benchmark instances.
+| Package  | Version |
+|----------|---------|
+| 🐍 Python   | ≥ 3.11.11 |
+| 🔥 PyTorch  | ≥ 2.4.0 |
+| 🎮 Gym      | ≥ 0.22.0 |
+| 📊 NumPy    | ≥ 2.0.2 |
+| 🐼 Pandas   | ≥ 2.2.3 |
 
-## Reproducing the results from the paper
+The repository is organized as follows:
 
-In our paper, we perform multiple different experiments on both the JSSP and FJSP, covering multiple instance sizes and algorithms. 
-To run each one, change the ```config.json``` file accordingly, specifically the following parameters:
+- **`/data_dev`** and **`/data_test`**: Validation and testing instances for JSSP and FJSP of various sizes.  
+- **`/env`**: Implementation of the scheduling environment.  
+- **`/models`**: Models for value-based and policy-gradient algorithms.  
+- **`/network`**: Utilities for heterogeneous GNN, MLPs, and noisy linear layers.  
+- **`/results`**: Results for each individual benchmark instance.  
+- **`/save`**: Stores trained model parameters.  
+- **`/utils`**: Utility scripts for training and testing.  
+- **`config.json`**: Central configuration for experiments.  
+- **Training scripts:**  
+  - `train_dqn.py` → Value-based algorithms  
+  - `train_a2c.py` → A2C  
+  - `train_ppo.py` → PPO  
+  - `train_reinforce.py` → REINFORCE  
+  - `train_vmpo.py` → V-MPO  
+- **Validation/testing scripts:**  
+  - `validate.py` → Validation steps  
+  - `test.py` → Randomly generated instances  
+  - `test_benchmark.py` → Benchmark instances
 
-* **Problem type:** set ```is_fjsp``` in ```env_paras``` to ```true``` for FJSP experiments, or ```false``` for JSSP experiments.
-* **Instance size:** adjust ```num_jobs``` and ```num_mas``` in ```env_paras``` to match the problem instance (e.g., 20 jobs and 10 machines).
-* **Algorithm selection:** use the ```config_name``` field in either ```dqn_paras``` or ```ppo_paras``` to select the desired algorithm (e.g., ```"DQN"```, ```"PPO"```).
-If using any Rainbow extensions, set the boolean parameters accordingly in ```extensions_paras``` (e.g., ```"use_noisy": true```).
-* **Testing:** for evaluation, configure ```test_paras``` appropriately (e.g., set ```"is_ppo": true``` if using PPO, specify the instance size used during training by setting ```saved_model_num_jobs``` and ```saved_model_num_mas``` accordingly)
+---
 
-### Training
+## ⚙️ Running Experiments
 
-For training any value-based algorithm, after setting the correct parameters in ```config.json```, run the following command:
+## 1. 🏋️ Training a Model
 
+To train a model, you first need to configure your experiment in `config.json`. This includes problem type, instance size, algorithm, and any Rainbow extensions (for value-based methods).
+
+---
+
+
+### 🔹 Problem Type
+
+Set the `env_paras.is_fjsp` flag:
+
+| Flag | Problem |
+|------|---------|
+| `true`  | FJSP (Flexible Job Shop Problem) |
+| `false` | JSSP (Job Shop Scheduling Problem) |
+
+
+### 🔹 Instance size
+
+Configure the number of jobs and machines in `env_paras`, e.g. (20 jobs and 10 machines):
+
+```
+"env_paras": {
+  "num_jobs": 20,
+  "num_mas": 10
+}
+```
+
+### 🔹 Running Training
+
+Value-based algorithms (DQN and Rainbow configurations): 
 ```
 python train_dqn.py
 ```
 
-For the PPO algorithm, run:
+Policy-gradient algorithms: 
+```
+python train_ppo.py       # PPO
+python train_a2c.py       # A2C
+python train_reinforce.py # REINFORCE
+python train_vmpo.py      # V-MPO
+```
+
+### 🔹 Results naming
+
+The ```config_name``` field determines the save path.
+Example:
+```
+"config_name": "D3QN"
+```
+Results are saved to:
+```
+save/<problem_type>/<instance_size>/train_D3QN_<instance_size>
+```
+
+### 🔹 Rainbow extensions:
+
+Enable optional Rainbow extensions by setting Boolean flags in `extensions_paras` (e.g., `"use_noisy": true`). This should only be set when using value-based algorithms.
+
+### 🔹 Notes:
+
+* Training scripts automatically create the folder structure and save model parameters.
+
+* ```save_output``` in ```config.json``` controls whether outputs are saved.
+
+* ```load_state``` and ```load_epoch``` can be set if you want to resume training from a checkpoint.
+
+## 2. 🧪 Testing a Model
+
+Testing a model is similar to training in terms of configuration. You need to set the environment, algorithm, and instance size properly.
+
+---
+
+### 🔹 Environment
+
+Set the `is_fjsp` flag in `env_paras` to choose the problem type, as well as `num_jobs` and `num_machines` for the instance size.
+
+---
+
+### 🔹 Test Parameters (`test_paras`)
+
+Configure the `test_paras` section in `config.json`. Example:
 
 ```
-python train_ppo.py
+"test_paras": {
+  "sample": false,
+  "pomo_starting_nodes": false,
+  "topk": 5,
+  "is_ppo": false,
+  "is_a2c": false,
+  "is_reinforce": false,
+  "is_vmpo": false,
+  "is_sql": false,
+  "num_sample": 25,
+  "saved_model_num_jobs": 6,
+  "saved_model_num_mas": 6,
+  "benchmark_path": "data_test/FJSP/Public/Brandimarte/"
+}
 ```
 
-### Testing
+### Key Parameters Explained
 
-For testing, just set the boolean variable ```is_fjsp``` in ```env_paras``` accordingly.
+| Parameter | Description                                                                   |
+|-----------|-------------------------------------------------------------------------------|
+| `sample` | If `true`, uses sampling instead of greedy decoding.                          |
+| `pomo_starting_nodes` | If `true`, uses POMO multistart decoding.                                     |
+| `topk` | Number of top actions to consider (only for sampling).                        |
+| `is_ppo`, `is_a2c`, `is_reinforce`, `is_vmpo`, `is_sql` | Set `true` for the algorithm you used during training and false for the rest. |
+| `num_sample` | Number of random samples per instance (used for sampling).                    |
+| `saved_model_num_jobs`, `saved_model_num_mas` | Instance size used during training, required to load the correct model.       |
+| `benchmark_path` | Path to benchmark dataset for evaluation.                                     |
+
+### 🔹 Running tests
 
 For randomly generated problems, run:
 
@@ -65,27 +163,31 @@ For randomly generated problems, run:
 python test.py
 ```
 
-For benchmark instances, do not forget to set the proper path (```benchmark_path``` in ```test_paras```) for the benchmark dataset to be used for evaluation. To properly save the results on each individual instance on an excel, change the ```output_path``` variable name as needed, at the end of the ```test_benchmark.py``` file. After, run:
+For benchmark instances, run:
 
 ```
 python test_benchmark.py
 ```
 
-## Acknowledgments
+## 3. 📊 Reproducing Paper Results
+
+To reproduce the results from our paper, simply run ```test.py``` and ```test_benchmark.py``` as is. For benchmark datasets, just set the appropriate ```benchmark_path```, as well as the ```is_fjsp``` parameter in ```env_paras``` accordingly.
+
+## 🙏 Acknowledgments
 
 We would like to thank the following repositories, which served as important foundations for our work:
 
 * https://github.com/songwenas12/fjsp-drl/tree/main
 * https://github.com/Curt-Park/rainbow-is-all-you-need
 
-## Citation
+## 📖 Citation
 
 If you find our work valuable for your research, please cite us:
 
 ```
 @misc{corrêa2025unravelingrainbowvaluebasedmethods,
       title={Unraveling the Rainbow: can value-based methods schedule?}, 
-      author={Arthur Corrêa and Alexandre Jesus and Cristóvão Silva and Samuel Moniz},
+      author={Arthur Corrêa and Alexandre Jesus and Cristóvão Silva and Paulo Nascimento and Samuel Moniz},
       year={2025},
       eprint={2505.03323},
       archivePrefix={arXiv},
