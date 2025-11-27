@@ -1,3 +1,6 @@
+import sys
+sys.path.append("..")
+
 import copy
 import json
 import os
@@ -60,7 +63,7 @@ def main(env_paras, model_paras, train_paras, extension_paras, test_paras, confi
     model_paras["actor_in_dim"] = model_paras["out_size_ma"] * 2 + model_paras["out_size_ope"] * 2
     model_paras["critic_in_dim"] = model_paras["out_size_ma"] + model_paras["out_size_ope"]
 
-    data_path = "./data_test/{0}/{1}{2}/".format(problem_type, env_paras["num_jobs"],
+    data_path = "../data_test/{0}/{1}{2}/".format(problem_type, env_paras["num_jobs"],
                                                  str.zfill(str(env_paras["num_mas"]), 2))
     test_files = sorted(os.listdir(data_path))
     test_files = [os.path.join(data_path, f) for f in test_files]
@@ -92,7 +95,7 @@ def main(env_paras, model_paras, train_paras, extension_paras, test_paras, confi
     else:
         model = dqn_model.Model(model_paras, train_paras, extension_paras, test_paras["topk"])
 
-    save_path = './save/{0}/{1}{2}/train_{3}_{4} x {5}'.format(problem_type, test_paras["saved_model_num_jobs"],
+    save_path = '../save/{0}/{1}{2}/train_{3}_{4} x {5}'.format(problem_type, test_paras["saved_model_num_jobs"],
                                                                str.zfill(str(test_paras["saved_model_num_mas"]), 2),
                                                                train_paras["config_name"],
                                                                test_paras["saved_model_num_jobs"],
@@ -240,30 +243,85 @@ def main(env_paras, model_paras, train_paras, extension_paras, test_paras, confi
 
 
 if __name__ == '__main__':
-    # Load config and init objects
-    with open("./config.json", 'r') as load_f:
-        load_dict = json.load(load_f)
-    env_paras = copy.deepcopy(load_dict["env_paras"])
-    model_paras = copy.deepcopy(load_dict["model_paras"])
 
-    extension_paras = copy.deepcopy(load_dict["extensions_paras"])
-    test_paras = copy.deepcopy(load_dict["test_paras"])
+    instance_sizes = [(6, 6), (10, 5), (20, 5), (15, 10), (20, 10), (30, 10), (40, 10)]
+    problem_types = ["FJSP", "JSSP"]
+    writer = pd.ExcelWriter("testing_results.xlsx", engine="openpyxl")
 
-    if test_paras["is_ppo"]:
-        train_paras = copy.deepcopy(load_dict["ppo_paras"])
-    elif test_paras["is_a2c"]:
-        train_paras = copy.deepcopy(load_dict["a2c_paras"])
-    elif test_paras["is_reinforce"]:
-        train_paras = copy.deepcopy(load_dict["reinforce_paras"])
-    elif test_paras["is_vmpo"]:
-        train_paras = copy.deepcopy(load_dict["vmpo_paras"])
-    else:
-        train_paras = copy.deepcopy(load_dict["dqn_paras"])
+    for size in instance_sizes:
+        size_results = []
 
-    size = (env_paras["num_jobs"], env_paras["num_mas"])
-    problem = "FJSP" if env_paras["is_fjsp"] else "JSSP"
-    print("#####################################################################################")
-    print(f"Solving {size[0]}x{size[1]} {problem} instances")
-    config_name = train_paras["config_name"]
-    print(f"Running {config_name} model")
-    _ = main(env_paras, model_paras, train_paras, extension_paras, test_paras, config_name)
+        for problem in problem_types:
+            print("#####################################################################################")
+            print(f"Solving {size[0]}x{size[1]} {problem} instances")
+
+            config_names = ["DQN", "DDQN", "PER", "Dueling", "Noisy", "Distributional", "NStep", "Rainbow", "PPO",
+                            "A2C", "REINFORCE", "VMPO"]
+            config_uses = [[False, False, False, False, False, False],
+                           [True, False, False, False, False, False],
+                           [False, True, False, False, False, False],
+                           [False, False, True, False, False, False],
+                           [False, False, False, True, False, False],
+                           [False, False, False, False, True, False],
+                           [False, False, False, False, False, True],
+                           [True, True, True, True, True, True]]
+
+            for config in range(12):
+                print(f"Running {config_names[config]} model")
+
+                # Load config and init objects
+                with open("../config.json", 'r') as load_f:
+                    load_dict = json.load(load_f)
+                env_paras = copy.deepcopy(load_dict["env_paras"])
+                model_paras = copy.deepcopy(load_dict["model_paras"])
+
+                extension_paras = copy.deepcopy(load_dict["extensions_paras"])
+                test_paras = copy.deepcopy(load_dict["test_paras"])
+                if size[0] == 30 or size[0] == 40:
+                    test_paras["saved_model_num_jobs"] = 20
+                    test_paras["saved_model_num_mas"] = 10
+                else:
+                    test_paras["saved_model_num_jobs"] = size[0]
+                    test_paras["saved_model_num_mas"] = size[1]
+                env_paras["num_jobs"] = size[0]
+                env_paras["num_mas"] = size[1]
+                env_paras["is_fjsp"] = True if problem == "FJSP" else False
+                test_paras["pomo_starting_nodes"] = False
+
+                if config_names[config] == "PPO":
+                    train_paras = copy.deepcopy(load_dict["ppo_paras"])
+                    test_paras["is_ppo"] = True
+                elif config_names[config] == "A2C":
+                    train_paras = copy.deepcopy(load_dict["a2c_paras"])
+                    test_paras["is_a2c"] = True
+                elif config_names[config] == "REINFORCE":
+                    train_paras = copy.deepcopy(load_dict["reinforce_paras"])
+                    test_paras["is_reinforce"] = True
+                elif config_names[config] == "VMPO":
+                    train_paras = copy.deepcopy(load_dict["vmpo_paras"])
+                    test_paras["is_vmpo"] = True
+                else:
+                    train_paras = copy.deepcopy(load_dict["dqn_paras"])
+                    extension_paras["use_ddqn"] = config_uses[config][0]
+                    extension_paras["use_per"] = config_uses[config][1]
+                    extension_paras["use_dueling"] = config_uses[config][2]
+                    extension_paras["use_noisy"] = config_uses[config][3]
+                    extension_paras["use_distributional"] = config_uses[config][4]
+                    extension_paras["use_n_step"] = config_uses[config][5]
+
+                train_paras["config_name"] = config_names[config]
+                makespans = main(env_paras, model_paras, train_paras, extension_paras, test_paras, config_names[config])
+                for idx, obj in enumerate(makespans):
+                    size_results.append({
+                        "Algorithm": config_names[config],
+                        "Problem type": problem,
+                        "Instance index": idx,
+                        "Obj": float(obj)
+                    })
+
+        df = pd.DataFrame(size_results)
+        sheet_name = f"{size[0]}x{size[1]}"
+        df.to_excel(writer, sheet_name=sheet_name, index=False)
+
+    writer.close()
+    print("✅ Results saved to 'testing_results.xlsx'")

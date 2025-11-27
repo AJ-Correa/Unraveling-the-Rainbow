@@ -15,7 +15,7 @@ def write_json(data: dict, path: str):
         fp.write(json.dumps(data, indent=2, ensure_ascii=False))
 
 
-def pomo_starting_nodes(instance, env_test_paras, is_public_jssp, samples=None):
+def benchmark_pomo_starting_nodes(instance, env_test_paras, is_public_jssp, samples=None, max_starting_nodes=None):
     env_test_paras["batch_size"] = 1
     env = gym.make('fjsp-v0', case=instance, env_paras=env_test_paras, data_source='public',
                    is_public_jssp=is_public_jssp)
@@ -32,11 +32,10 @@ def pomo_starting_nodes(instance, env_test_paras, is_public_jssp, samples=None):
     job_ready = torch.ones((batch_size, num_opes, 1), dtype=torch.bool)  # all jobs ready
 
     initial_eligible_mask = eligible_mask & first_ope_mask & ma_idle & job_ready
-    num_starting_nodes = initial_eligible_mask.sum()  # Generate action list batch_size, num_opes, num_mas = initial_eligible_mask.shape action_list = [] for b in range(batch_size): for job in range(env.num_jobs): op = env.num_ope_biases_batch[b, job].item() mas = torch.nonzero(initial_eligible_mask[b, op, :], as_tuple=False).squeeze() if mas.ndim == 0: mas = mas.unsqueeze(0) for m in mas: action_list.append([op, m.item(), job])
 
     # Generate action list
     batch_size, num_opes, num_mas = initial_eligible_mask.shape
-    action_list = []
+    all_actions = []
 
     for b in range(batch_size):
         for job in range(env.num_jobs):
@@ -44,13 +43,17 @@ def pomo_starting_nodes(instance, env_test_paras, is_public_jssp, samples=None):
             mas = torch.nonzero(initial_eligible_mask[b, op, :], as_tuple=False).squeeze()
             if mas.ndim == 0:
                 mas = mas.unsqueeze(0)
-            for m in mas:
-                action_list.append([op, m.item(), job])
+            actions = [[op, m.item(), job] for m in mas]
 
-    if len(action_list) == 0:
+            if max_starting_nodes is not None and len(actions) > max_starting_nodes:
+                actions = actions[:max_starting_nodes]
+
+            all_actions.extend(actions)
+
+    if len(all_actions) == 0:
         return torch.empty(3, 0, dtype=torch.long), env
 
-    actions_tensor = torch.tensor(action_list, dtype=torch.long).T  # [3, num_starting_nodes]
+    actions_tensor = torch.tensor(all_actions, dtype=torch.long).T  # [3, num_starting_nodes]
 
     if samples is not None:
         # Repeat each starting node `samples` times
@@ -70,16 +73,7 @@ def pomo_starting_nodes(instance, env_test_paras, is_public_jssp, samples=None):
 
     return actions_tensor, env
 
-def repeat_instances_by_starting_nodes(instances, env_test_paras, is_public_jssp):
-    """
-    Repeat instances according to the number of POMO starting nodes, and create batched environment.
-
-    Returns:
-        repeated_instances: list of instance identifiers, repeated according to starting nodes
-        actions_tensor: [3, total_num_starting_nodes]
-        env: batched environment containing all repeated instances
-        instance_splits: list[int] giving number of starting nodes per original instance
-    """
+def repeat_instances_by_starting_nodes(instances, env_test_paras, is_public_jssp, max_starting_nodes):
     env_test_paras_copy = copy.deepcopy(env_test_paras)
     env_test_paras_copy["batch_size"] = len(instances)
     env = gym.make(
@@ -89,7 +83,6 @@ def repeat_instances_by_starting_nodes(instances, env_test_paras, is_public_jssp
         data_source='file'
     )
     env.reset()
-    max_starting_nodes = 10
 
     batch_size, num_ops, num_mas = env.ope_ma_adj_batch.shape
 

@@ -145,15 +145,16 @@ Configure the `test_paras` section in `config.json`. Example:
 
 ### Key Parameters Explained
 
-| Parameter | Description                                                                   |
-|-----------|-------------------------------------------------------------------------------|
-| `sample` | If `true`, uses sampling instead of greedy decoding.                          |
-| `pomo_starting_nodes` | If `true`, uses POMO multistart decoding.                                     |
-| `topk` | Number of top actions to consider (only for sampling).                        |
-| `is_ppo`, `is_a2c`, `is_reinforce`, `is_vmpo`, `is_sql` | Set `true` for the algorithm you used during training and false for the rest. |
-| `num_sample` | Number of random samples per instance (used for sampling).                    |
-| `saved_model_num_jobs`, `saved_model_num_mas` | Instance size used during training, required to load the correct model.       |
-| `benchmark_path` | Path to benchmark dataset for evaluation.                                     |
+| Parameter | Description                                                                                                                                                    |
+|-----------|----------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `sample` | If `true`, uses sampling instead of greedy decoding.                                                                                                           |
+| `topk` | Number of top actions to consider (only for sampling).                                                                                                         |
+| `pomo_starting_nodes` | If `true`, uses POMO multistart decoding.                                                                                                                      |
+| `max_pomo_nodes` | Number of maximum POMO starting nodes. Set it as `null` if you want to use the maximum number of nodes possible. |
+| `is_ppo`, `is_a2c`, `is_reinforce`, `is_vmpo`| Set `true` for the algorithm you used during training and false for the rest.                                                                                  |
+| `num_sample` | Number of random samples per instance (used for sampling).                                                                                                     |
+| `saved_model_num_jobs`, `saved_model_num_mas` | Instance size used during training, required to load the correct model.                                                                                        |
+| `benchmark_path` | Path to benchmark dataset for evaluation.                                                                                                                      |
 
 ### 🔹 Running tests
 
@@ -171,7 +172,7 @@ python test_benchmark.py
 
 ## 3. 📊 Reproducing Paper Results
 
-To reproduce the results from our paper, simply run ```test.py``` and ```test_benchmark.py``` as is. For benchmark datasets, just set the appropriate ```benchmark_path```, as well as the ```is_fjsp``` parameter in ```env_paras``` accordingly.
+To reproduce the results from our paper, simply run ```python reproduce_scripts/test.py``` and ```python reproduce_scripts/test_benchmark.py``` as they are.
 
 ## 🙏 Acknowledgments
 

@@ -1,3 +1,6 @@
+import sys
+sys.path.append("..")
+
 import copy
 import json
 import os
@@ -23,7 +26,8 @@ def setup_seed(seed):
     torch.backends.cudnn.deterministic = True
 
 
-def main(env_paras, model_paras, train_paras, extension_paras, test_paras):
+def main(env_paras, model_paras, train_paras, extension_paras, test_paras, config_name=None, instance_size=None,
+         results=None):
     device = torch.device("cuda:0")
     # device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     if device.type == 'cuda':
@@ -81,7 +85,7 @@ def main(env_paras, model_paras, train_paras, extension_paras, test_paras):
     else:
         model = dqn_model.Model(model_paras, train_paras, extension_paras, test_paras["topk"])
 
-    save_path = './save/{0}/{1}{2}/train_{3}_{4} x {5}'.format(problem_type, test_paras["saved_model_num_jobs"],
+    save_path = '../save/{0}/{1}{2}/train_{3}_{4} x {5}'.format(problem_type, test_paras["saved_model_num_jobs"],
                                                                str.zfill(str(test_paras["saved_model_num_mas"]), 2),
                                                                train_paras["config_name"],
                                                                test_paras["saved_model_num_jobs"],
@@ -109,6 +113,12 @@ def main(env_paras, model_paras, train_paras, extension_paras, test_paras):
     start = time.time()
     print('There are {0} dev instances.'.format(len(test_files)))  # validation set is also called development set
     total_makespan = 0
+
+    if results != None:
+        result_column_name = f"{instance_size} - {config_name}"
+
+        if result_column_name not in results:
+            results[result_column_name] = []
 
     if not test_paras["sample"]:
         for instance in test_files:
@@ -154,6 +164,8 @@ def main(env_paras, model_paras, train_paras, extension_paras, test_paras):
 
             makespan = copy.deepcopy(env.makespan_batch.min()).cpu().item()
             total_makespan += makespan
+            if results != None:
+                results[result_column_name].append(makespan)
 
             print('testing time: ', round(time.time() - start, 2), ' | makespan: ', round(makespan, 2), ' | instance: ',
                   instance.rsplit("/", 1)[-1].split(".", 1)[0])
@@ -204,6 +216,8 @@ def main(env_paras, model_paras, train_paras, extension_paras, test_paras):
             makespans = copy.deepcopy(env.makespan_batch).cpu().numpy()  # shape: (S,)
             min_makespan = makespans.min()
             total_makespan += min_makespan
+            if results != None:
+                results[result_column_name].append(min_makespan)
 
             print('testing time: ', round(time.time() - start, 2), ' | makespan: ', round(min_makespan, 2),
                   ' | instance: ', instance.rsplit("/", 1)[-1].split(".", 1)[0])
@@ -211,31 +225,75 @@ def main(env_paras, model_paras, train_paras, extension_paras, test_paras):
 
 
 if __name__ == '__main__':
-    # Load config and init objects
-    with open("./config.json", 'r') as load_f:
-        load_dict = json.load(load_f)
-    env_paras = copy.deepcopy(load_dict["env_paras"])
-    model_paras = copy.deepcopy(load_dict["model_paras"])
+    results = {}
+    benchmarks = ["../data_test/FJSP/Public/Brandimarte/",
+                  "../data_test/FJSP/Public/Dauzere/",
+                  "../data_test/FJSP/Public/Barnes/",
+                  "../data_test/FJSP/Public/Hurink/vdata/",
+                  "../data_test/JSSP/Public/Taillard/",
+                  "../data_test/JSSP/Public/Demirkol/",
+                  "../data_test/JSSP/Public/Lawrence/"]
+    instance_sizes = [(6, 6)]
 
-    extension_paras = copy.deepcopy(load_dict["extensions_paras"])
-    test_paras = copy.deepcopy(load_dict["test_paras"])
+    for size in instance_sizes:
+        for dataset in benchmarks:
+            print("#####################################################################################")
+            print(f"Solving {dataset} benchmark with models trained on {size[0]} x {size[1]} instances")
+            config_names = ["DQN", "DDQN", "PER", "Dueling", "Noisy", "Distributional", "NStep", "Rainbow", "PPO", "A2C",
+                            "REINFORCE", "VMPO"]
+            config_uses = [[False, False, False, False, False, False],
+                           [True, False, False, False, False, False],
+                           [False, True, False, False, False, False],
+                           [False, False, True, False, False, False],
+                           [False, False, False, True, False, False],
+                           [False, False, False, False, True, False],
+                           [False, False, False, False, False, True],
+                           [True, True, True, True, True, True]]
 
-    if test_paras["is_ppo"]:
-        train_paras = copy.deepcopy(load_dict["ppo_paras"])
-    elif test_paras["is_a2c"]:
-        train_paras = copy.deepcopy(load_dict["a2c_paras"])
-    elif test_paras["is_reinforce"]:
-        train_paras = copy.deepcopy(load_dict["reinforce_paras"])
-    elif test_paras["is_vmpo"]:
-        train_paras = copy.deepcopy(load_dict["vmpo_paras"])
-    else:
-        train_paras = copy.deepcopy(load_dict["dqn_paras"])
+            for config in range(12):
+                print(f"Running {config_names[config]} model")
 
-    size = (test_paras["saved_model_num_jobs"], test_paras["saved_model_num_mas"])
-    dataset = test_paras["benchmark_path"]
-    print("#####################################################################################")
-    print(f"Solving {dataset} benchmark with models trained on {size[0]} x {size[1]} instances")
-    config_name = train_paras["config_name"]
-    print(f"Running {config_name} model")
+                # Load config and init objects
+                with open("../config.json", 'r') as load_f:
+                    load_dict = json.load(load_f)
+                env_paras = copy.deepcopy(load_dict["env_paras"])
+                model_paras = copy.deepcopy(load_dict["model_paras"])
 
-    main(env_paras, model_paras, train_paras, extension_paras, test_paras)
+                extension_paras = copy.deepcopy(load_dict["extensions_paras"])
+                test_paras = copy.deepcopy(load_dict["test_paras"])
+                test_paras["saved_model_num_jobs"] = size[0]
+                test_paras["saved_model_num_mas"] = size[1]
+                test_paras["benchmark_path"] = dataset
+                test_paras["pomo_starting_nodes"] = True
+                test_paras["max_pomo_nodes"] = None
+
+                if config_names[config] == "PPO":
+                    train_paras = copy.deepcopy(load_dict["ppo_paras"])
+                    test_paras["is_ppo"] = True
+                elif config_names[config] == "A2C":
+                    train_paras = copy.deepcopy(load_dict["a2c_paras"])
+                    test_paras["is_a2c"] = True
+                elif config_names[config] == "REINFORCE":
+                    train_paras = copy.deepcopy(load_dict["reinforce_paras"])
+                    test_paras["is_reinforce"] = True
+                elif config_names[config] == "VMPO":
+                    train_paras = copy.deepcopy(load_dict["vmpo_paras"])
+                    test_paras["is_vmpo"] = True
+                else:
+                    train_paras = copy.deepcopy(load_dict["dqn_paras"])
+                    extension_paras["use_ddqn"] = config_uses[config][0]
+                    extension_paras["use_per"] = config_uses[config][1]
+                    extension_paras["use_dueling"] = config_uses[config][2]
+                    extension_paras["use_noisy"] = config_uses[config][3]
+                    extension_paras["use_distributional"] = config_uses[config][4]
+                    extension_paras["use_n_step"] = config_uses[config][5]
+
+                train_paras["config_name"] = config_names[config]
+                main(env_paras, model_paras, train_paras, extension_paras, test_paras, config_names[config], size, results)
+
+            df = pd.DataFrame(dict([(key, pd.Series(value)) for key, value in results.items()]))
+
+            # Save results to an Excel file
+            dataset_name = os.path.basename(os.path.normpath(dataset))
+            output_file = f"results/Public/greedy/results_{dataset_name}.xlsx"
+            df.to_excel(output_file, index=False)
