@@ -120,8 +120,6 @@ Testing a model is similar to training in terms of configuration. You need to se
 
 Set the `is_fjsp` flag in `env_paras` to choose the problem type, as well as `num_jobs` and `num_machines` for the instance size.
 
----
-
 ### 🔹 Test Parameters (`test_paras`)
 
 Configure the `test_paras` section in `config.json`. Example:
